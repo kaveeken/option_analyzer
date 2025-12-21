@@ -5,7 +5,7 @@ All configuration values are loaded from environment variables or .env file.
 """
 
 from functools import lru_cache
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     # Cache Configuration
     cache_type: Literal["memory", "redis"] = "memory"
-    redis_url: Optional[str] = None
+    redis_url: str | None = None
 
     # Logging
     log_level: str = "INFO"

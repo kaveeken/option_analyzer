@@ -8,9 +8,7 @@ import pytest
 
 from option_analyzer.models.domain import (
     OptionContract,
-    OptionPosition,
     Stock,
-    Strategy,
 )
 
 

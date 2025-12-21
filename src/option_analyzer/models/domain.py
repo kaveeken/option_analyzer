@@ -9,7 +9,7 @@ These models represent the fundamental business objects:
 """
 
 from datetime import date
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -30,7 +30,7 @@ class Stock(BaseModel):
     symbol: str
     current_price: float = Field(gt=0, description="Current stock price (must be positive)")
     conid: str
-    available_expirations: List[date] = Field(default_factory=list)
+    available_expirations: list[date] = Field(default_factory=list)
 
     def payoff_at_price(self, price: float) -> float:
         """
@@ -63,8 +63,8 @@ class OptionContract(BaseModel):
     strike: float = Field(gt=0)
     right: Literal["C", "P"]
     expiration: date
-    bid: Optional[float] = Field(default=None, ge=0)
-    ask: Optional[float] = Field(default=None, ge=0)
+    bid: float | None = Field(default=None, ge=0)
+    ask: float | None = Field(default=None, ge=0)
     multiplier: int = Field(default=100, gt=0)
 
     def intrinsic_value(self, price: float) -> float:
@@ -87,7 +87,7 @@ class OptionContract(BaseModel):
             # Put: max(strike - price, 0) * multiplier
             return max(0, self.strike - price) * self.multiplier
 
-    def days_to_expiry(self, reference_date: Optional[date] = None) -> int:
+    def days_to_expiry(self, reference_date: date | None = None) -> int:
         """
         Calculate calendar days until expiration.
 
@@ -180,7 +180,7 @@ class Strategy(BaseModel):
 
     stock: Stock
     stock_quantity: int = 0
-    option_positions: List[OptionPosition] = Field(default_factory=list)
+    option_positions: list[OptionPosition] = Field(default_factory=list)
 
     def total_payoff(
         self, price: float, include_transaction_costs: bool = True
@@ -232,7 +232,7 @@ class Strategy(BaseModel):
         cost_per_contract = get_settings().default_transaction_cost
         return sum(abs(pos.quantity) * cost_per_contract for pos in self.option_positions)
 
-    def get_earliest_expiration(self) -> Optional[date]:
+    def get_earliest_expiration(self) -> date | None:
         """
         Get the earliest expiration date from all option positions.
 
