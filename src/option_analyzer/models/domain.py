@@ -13,7 +13,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from ..utils.exceptions import InvalidQuantityError
+from ..utils.exceptions import (
+    InvalidQuantityError,
+    MissingBidAskError,
+    MixedExpirationError,
+)
 
 
 class Stock(BaseModel):
@@ -270,3 +274,24 @@ class Strategy(BaseModel):
             return True
         expirations = {pos.contract.expiration for pos in self.option_positions}
         return len(expirations) == 1
+
+    def validate_for_analysis(self) -> None:
+        """
+        Validate that strategy is ready for analysis.
+
+        Raises:
+            MixedExpirationError: If options have different expiration dates
+            MissingBidAskError: If any option lacks bid/ask price data
+
+        Note:
+            Call this before performing expensive calculations like Monte Carlo
+            simulations to fail fast with clear error messages.
+        """
+        if not self.validate_single_expiration():
+            raise MixedExpirationError()
+
+        for pos in self.option_positions:
+            if pos.contract.bid is None or pos.contract.ask is None:
+                raise MissingBidAskError(
+                    f"Missing price data for contract {pos.contract.conid}"
+                )

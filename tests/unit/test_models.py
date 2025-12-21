@@ -19,7 +19,11 @@ from option_analyzer.models.domain import (
     Stock,
     Strategy,
 )
-from option_analyzer.utils.exceptions import InvalidQuantityError
+from option_analyzer.utils.exceptions import (
+    InvalidQuantityError,
+    MissingBidAskError,
+    MixedExpirationError,
+)
 
 
 class TestStock:
@@ -386,3 +390,108 @@ class TestStrategy:
         payoff_without_costs = strategy.total_payoff(110.0, include_transaction_costs=False)
 
         assert payoff_with_costs == payoff_without_costs - 0.65
+
+    def test_validate_for_analysis_valid_strategy(
+        self, sample_stock: Stock, sample_call: OptionContract
+    ) -> None:
+        """Test that valid strategy passes validation."""
+        strategy = Strategy(
+            stock=sample_stock,
+            stock_quantity=0,
+            option_positions=[OptionPosition(contract=sample_call, quantity=1)],
+        )
+        # Should not raise any exceptions
+        strategy.validate_for_analysis()
+
+    def test_validate_for_analysis_empty_strategy(self, sample_stock: Stock) -> None:
+        """Test that empty strategy (no positions) passes validation."""
+        strategy = Strategy(stock=sample_stock, option_positions=[])
+        # Should not raise any exceptions
+        strategy.validate_for_analysis()
+
+    def test_validate_for_analysis_mixed_expiration(self, sample_stock: Stock) -> None:
+        """Test that mixed expiration dates raise MixedExpirationError."""
+        call1 = OptionContract(
+            conid="12345",
+            strike=100.0,
+            right="C",
+            expiration=date(2024, 12, 20),
+            bid=5.0,
+            ask=5.5,
+        )
+        call2 = OptionContract(
+            conid="12346",
+            strike=105.0,
+            right="C",
+            expiration=date(2025, 1, 17),
+            bid=3.0,
+            ask=3.5,
+        )
+
+        strategy = Strategy(
+            stock=sample_stock,
+            option_positions=[
+                OptionPosition(contract=call1, quantity=1),
+                OptionPosition(contract=call2, quantity=-1),
+            ],
+        )
+
+        with pytest.raises(MixedExpirationError):
+            strategy.validate_for_analysis()
+
+    def test_validate_for_analysis_missing_bid(self, sample_stock: Stock) -> None:
+        """Test that missing bid raises MissingBidAskError."""
+        call = OptionContract(
+            conid="12345",
+            strike=100.0,
+            right="C",
+            expiration=date(2024, 12, 20),
+            bid=None,  # Missing bid
+            ask=5.5,
+        )
+
+        strategy = Strategy(
+            stock=sample_stock,
+            option_positions=[OptionPosition(contract=call, quantity=1)],
+        )
+
+        with pytest.raises(MissingBidAskError, match="Missing price data for contract 12345"):
+            strategy.validate_for_analysis()
+
+    def test_validate_for_analysis_missing_ask(self, sample_stock: Stock) -> None:
+        """Test that missing ask raises MissingBidAskError."""
+        call = OptionContract(
+            conid="12345",
+            strike=100.0,
+            right="C",
+            expiration=date(2024, 12, 20),
+            bid=5.0,
+            ask=None,  # Missing ask
+        )
+
+        strategy = Strategy(
+            stock=sample_stock,
+            option_positions=[OptionPosition(contract=call, quantity=1)],
+        )
+
+        with pytest.raises(MissingBidAskError, match="Missing price data for contract 12345"):
+            strategy.validate_for_analysis()
+
+    def test_validate_for_analysis_missing_both_bid_ask(self, sample_stock: Stock) -> None:
+        """Test that missing both bid and ask raises MissingBidAskError."""
+        call = OptionContract(
+            conid="12345",
+            strike=100.0,
+            right="C",
+            expiration=date(2024, 12, 20),
+            bid=None,  # Missing bid
+            ask=None,  # Missing ask
+        )
+
+        strategy = Strategy(
+            stock=sample_stock,
+            option_positions=[OptionPosition(contract=call, quantity=1)],
+        )
+
+        with pytest.raises(MissingBidAskError, match="Missing price data for contract 12345"):
+            strategy.validate_for_analysis()
