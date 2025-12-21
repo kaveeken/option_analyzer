@@ -188,7 +188,7 @@ class TestOptionPosition:
             OptionPosition(contract=sample_call, quantity=0)
 
     def test_missing_bid_ask_handling(self) -> None:
-        """Test handling of missing bid/ask prices."""
+        """Test that missing bid/ask prices raise MissingBidAskError."""
         contract = OptionContract(
             conid="12345",
             strike=100.0,
@@ -197,9 +197,15 @@ class TestOptionPosition:
             bid=None,
             ask=None,
         )
-        pos = OptionPosition(contract=contract, quantity=1)
-        # Should use 0 when bid/ask unavailable
-        assert pos.premium_paid == 0.0
+        # Long position: should raise error when ask is unavailable
+        pos_long = OptionPosition(contract=contract, quantity=1)
+        with pytest.raises(MissingBidAskError, match="Missing ask price"):
+            _ = pos_long.premium_paid
+
+        # Short position: should raise error when bid is unavailable
+        pos_short = OptionPosition(contract=contract, quantity=-1)
+        with pytest.raises(MissingBidAskError, match="Missing bid price"):
+            _ = pos_short.premium_paid
 
 
 class TestStrategy:

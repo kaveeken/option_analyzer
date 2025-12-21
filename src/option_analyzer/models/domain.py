@@ -148,6 +148,9 @@ class OptionPosition(BaseModel):
             Negative value for long positions (cost)
             Positive value for short positions (credit)
 
+        Raises:
+            MissingBidAskError: If required bid/ask price data is unavailable
+
         Note:
             - Long positions pay the ask price
             - Short positions receive the bid price
@@ -155,12 +158,20 @@ class OptionPosition(BaseModel):
         """
         if self.quantity > 0:
             # Long: pay ask (negative cash flow)
-            price = self.contract.ask if self.contract.ask is not None else 0.0
-            return -self.quantity * price * self.contract.multiplier
+            if self.contract.ask is None:
+                raise MissingBidAskError(
+                    f"Missing ask price for contract {self.contract.conid} "
+                    f"({self.contract.strike} {self.contract.right} {self.contract.expiration})"
+                )
+            return -self.quantity * self.contract.ask * self.contract.multiplier
         else:
             # Short: receive bid (positive cash flow)
-            price = self.contract.bid if self.contract.bid is not None else 0.0
-            return -self.quantity * price * self.contract.multiplier
+            if self.contract.bid is None:
+                raise MissingBidAskError(
+                    f"Missing bid price for contract {self.contract.conid} "
+                    f"({self.contract.strike} {self.contract.right} {self.contract.expiration})"
+                )
+            return -self.quantity * self.contract.bid * self.contract.multiplier
 
     def payoff_at_price(self, price: float) -> float:
         """
