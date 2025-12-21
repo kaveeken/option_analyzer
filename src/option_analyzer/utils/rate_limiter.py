@@ -36,6 +36,16 @@ class RateLimiter:
         self.requests: deque[float] = deque()
         self._lock = asyncio.Lock()
 
+    def _cleanup_expired_requests(self, now: float) -> None:
+        """
+        Remove expired requests outside the time window.
+
+        Args:
+            now: Current timestamp
+        """
+        while self.requests and self.requests[0] <= now - self.per_seconds:
+            self.requests.popleft()
+
     async def acquire(self) -> None:
         """
         Acquire permission to make a request.
@@ -47,10 +57,7 @@ class RateLimiter:
         """
         async with self._lock:
             now = time.time()
-
-            # Remove requests outside the time window
-            while self.requests and self.requests[0] <= now - self.per_seconds:
-                self.requests.popleft()
+            self._cleanup_expired_requests(now)
 
             # If at capacity, wait until oldest request expires
             if len(self.requests) >= self.max_requests:
@@ -59,8 +66,7 @@ class RateLimiter:
                     await asyncio.sleep(sleep_time)
                 # After sleep, clean up again
                 now = time.time()
-                while self.requests and self.requests[0] <= now - self.per_seconds:
-                    self.requests.popleft()
+                self._cleanup_expired_requests(now)
 
             # Record this request
             self.requests.append(time.time())

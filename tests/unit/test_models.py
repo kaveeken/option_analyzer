@@ -90,6 +90,27 @@ class TestOptionContract:
         ref = date.today() + timedelta(days=10)
         assert contract.days_to_expiry(ref) == 20
 
+    def test_days_to_expiry_raises_for_expired_option(self) -> None:
+        """Test that days_to_expiry raises ValueError for expired options."""
+        past = date.today() - timedelta(days=10)
+        contract = OptionContract(
+            conid="12345",
+            strike=100.0,
+            right="C",
+            expiration=past,
+            bid=5.0,
+            ask=5.5,
+        )
+
+        # Should raise ValueError when option is expired (default to today)
+        with pytest.raises(ValueError, match="Option has expired"):
+            contract.days_to_expiry()
+
+        # Should raise ValueError with custom reference date after expiration
+        future_ref = date.today() + timedelta(days=5)
+        with pytest.raises(ValueError, match="Option has expired"):
+            contract.days_to_expiry(future_ref)
+
     def test_option_requires_positive_strike(self) -> None:
         """Test that strike must be positive."""
         with pytest.raises(ValidationError):

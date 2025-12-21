@@ -96,9 +96,20 @@ class OptionContract(BaseModel):
 
         Returns:
             Number of calendar days to expiration
+
+        Raises:
+            ValueError: If reference_date is after expiration (option has expired)
         """
         ref = reference_date or date.today()
-        return (self.expiration - ref).days
+        days = (self.expiration - ref).days
+
+        if days < 0:
+            raise ValueError(
+                f"Option has expired: reference_date ({ref}) is after "
+                f"expiration ({self.expiration})"
+            )
+
+        return days
 
 
 class OptionPosition(BaseModel):
