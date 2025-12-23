@@ -59,3 +59,27 @@ def sample_put() -> OptionContract:
 def future_date() -> date:
     """Return a date 30 days in the future."""
     return date.today() + timedelta(days=30)
+
+
+@pytest.fixture
+def sample_returns():
+    """Sample historical return multipliers for testing."""
+    import numpy as np
+
+    return np.array([1.02, 0.98, 1.01, 0.99, 1.03, 1.00, 0.97, 1.04, 1.01, 0.99])
+
+
+@pytest.fixture
+def sample_closes():
+    """Sample closing prices for testing geometric returns."""
+    import numpy as np
+
+    return np.array([100.0, 102.0, 99.96, 100.96, 99.95, 102.95, 102.95, 99.86, 103.86, 104.90, 103.85])
+
+
+@pytest.fixture
+def fixed_rng():
+    """Fixed RNG for reproducible tests."""
+    import numpy as np
+
+    return np.random.default_rng(42)
