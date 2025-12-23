@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # IBKR API Configuration
     ibkr_base_url: str = "https://localhost:5000/v1/api"
     ibkr_timeout: int = 30
+    ibkr_verify_ssl: bool = True
+    ibkr_max_retries: int = 3
+    ibkr_retry_delay: float = 1.0  # Initial delay in seconds for exponential backoff
 
     # Server Configuration
     port: int = 8080

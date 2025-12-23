@@ -28,6 +28,20 @@ class IBKRAPIError(OptionAnalyzerError):
         super().__init__(message, code="IBKR_API_ERROR")
 
 
+class IBKRConnectionError(OptionAnalyzerError):
+    """Raised when connection to IBKR API fails."""
+
+    def __init__(self, message: str = "Failed to connect to IBKR API") -> None:
+        super().__init__(message, code="IBKR_CONNECTION_ERROR")
+
+
+class InsufficientDataError(OptionAnalyzerError):
+    """Raised when insufficient data is available for analysis."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, code="INSUFFICIENT_DATA")
+
+
 class ValidationError(OptionAnalyzerError):
     """Raised when data validation fails."""
 
@@ -62,6 +76,17 @@ class SymbolNotFoundError(OptionAnalyzerError):
     def __init__(self, symbol: str) -> None:
         message = f"Symbol '{symbol}' not found"
         super().__init__(message, code="SYMBOL_NOT_FOUND")
+
+
+class AmbiguousSymbolError(OptionAnalyzerError):
+    """Raised when multiple matches are found for a symbol."""
+
+    def __init__(self, symbol: str, matches: list[str] | None = None) -> None:
+        if matches:
+            message = f"Symbol '{symbol}' is ambiguous. Multiple matches found: {', '.join(matches)}"
+        else:
+            message = f"Symbol '{symbol}' is ambiguous"
+        super().__init__(message, code="AMBIGUOUS_SYMBOL")
 
 
 class RateLimitedError(OptionAnalyzerError):
