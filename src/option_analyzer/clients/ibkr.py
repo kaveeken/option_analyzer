@@ -95,7 +95,7 @@ class IBKRClient:
                 await asyncio.sleep(self._calculate_backoff(attempt))
             else:
                 raise IBKRAPIError(f"Error with status code {status_code}: {error_body}") from error
-        elif status_code > 400:
+        elif status_code >= 400:
             raise IBKRAPIError(f"Error with status code {status_code}: {error_body}") from error
 
     async def get_request(self, endpoint: str, **kwargs: Any) -> Any:
