@@ -77,15 +77,15 @@ class IBKRClient:
 
     async def _handleStatusError(self, error: httpx.HTTPStatusError, attempt: int) -> None:
         status_code = error.response.status_code
+        error_body = error.response.text
         if status_code == 429:
             if attempt < self.settings.ibkr_max_retries:
                 logger.warning(
                     f"Rate limited - retry attempt {attempt + 1}/{self.settings.ibkr_max_retries}"
                 )
                 await asyncio.sleep(self._calculate_backoff(attempt))
-            raise IBKRAPIError("Maximum retries reached before response.") from error
-        elif status_code > 400:
-            raise IBKRAPIError(f"Error with status code {status_code}") from error
+            else:
+                raise IBKRAPIError("Maximum retries reached before response.") from error
         elif status_code >= 500:
             if attempt < self.settings.ibkr_max_retries:
                 logger.warning(
@@ -93,9 +93,12 @@ class IBKRClient:
                     f"retry attempt {attempt + 1}/{self.settings.ibkr_max_retries}"
                 )
                 await asyncio.sleep(self._calculate_backoff(attempt))
-            raise IBKRAPIError(f"Error with status code {status_code}") from error
+            else:
+                raise IBKRAPIError(f"Error with status code {status_code}: {error_body}") from error
+        elif status_code > 400:
+            raise IBKRAPIError(f"Error with status code {status_code}: {error_body}") from error
 
-    async def get_request(self, endpoint: str, **kwargs: int) -> Any:
+    async def get_request(self, endpoint: str, **kwargs: Any) -> Any:
         """Send get request"""
         return await self._request("GET", endpoint, **kwargs)
 
