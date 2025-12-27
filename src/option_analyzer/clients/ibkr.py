@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import types
 from typing import Any
 
 import httpx
@@ -36,10 +37,20 @@ class IBKRClient:
     async def __aenter__(self) -> "IBKRClient":
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc_val: BaseException | None,
+            exc_tb: types.TracebackType | None
+    ) -> None:
         await self.aclose()
 
-    async def _request(self, method: str, endpoint: str, **kwargs: Any) -> Any:
+    async def _request(
+            self,
+            method: str,
+            endpoint: str,
+            **kwargs: Any # must correspond to httpx.AsyncClient.request parameters
+    ) -> Any:
         for attempt in range(self.settings.ibkr_max_retries + 1):
             try:
                 await self._rate_limiter.acquire()
