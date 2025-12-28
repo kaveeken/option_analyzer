@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import types
+from datetime import timedelta
 from typing import Any
 
 import httpx
@@ -102,27 +103,23 @@ class IBKRClient:
         """Send get request"""
         return await self._request("GET", endpoint, **kwargs)
 
-    async def get_search_results(self, symbol: str, asset_type: str) -> list[dict[str, Any]]:
+    async def get_search_results(self, symbol: str, asset_type: str, ttl: timedelta | None) -> list[dict[str, Any]]:
         endpoint = f"iserver/secdef/search?symbol={symbol}&name=false&assetType={asset_type}"
         response = self._cache.get(endpoint)
         if response is None:
             response = await self.get_request(endpoint)
-            self._cache.set(endpoint, response)
-        if isinstance(response, list) and all(isinstance(result, dict) for result in response):
-            return response
-        raise SymbolNotFoundError(symbol)
+            self._cache.set(endpoint, response, ttl)
+        if not isinstance(response, list) or not response:
+            raise SymbolNotFoundError(symbol)
+        return response
 
-    async def get_conid(
-            self, symbol: str,
-            primary_exchange: str | None = None,
-            asset_type: str = "STK" # Stock, OPT, FUT
-    ) -> int:
+    async def get_conid(self, symbol: str, asset_type: str = "STK") -> int:
         """
         Get contract id for symbol.
         Ambiguous results raise AmbiguousSymbolError,
         and can be retried with specific primary_exchange or asset_type
         """
-        result = await self.get_search_results(symbol, asset_type)
+        result = await self.get_search_results(symbol, asset_type, timedelta(hours=24))
         # the first result is assumed to be the correct/SMART choice, but this is not validated
         return int(result[0]["conid"])
 
