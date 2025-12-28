@@ -34,7 +34,7 @@ class Stock(BaseModel):
     symbol: str
     current_price: float = Field(gt=0, description="Current stock price (must be positive)")
     conid: str
-    available_expirations: list[date] = Field(default_factory=list)
+    available_expirations: list[str] = Field(default_factory=list)
 
     def payoff_at_price(self, price: float) -> float:
         """
