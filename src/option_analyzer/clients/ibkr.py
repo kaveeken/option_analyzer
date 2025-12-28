@@ -9,7 +9,7 @@ import httpx
 
 from option_analyzer.clients.cache import CacheInterface
 from option_analyzer.config import Settings
-from option_analyzer.utils.exceptions import IBKRAPIError, IBKRConnectionError
+from option_analyzer.utils.exceptions import IBKRAPIError, IBKRConnectionError, SymbolNotFoundError
 from option_analyzer.utils.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -101,6 +101,30 @@ class IBKRClient:
     async def get_request(self, endpoint: str, **kwargs: Any) -> Any:
         """Send get request"""
         return await self._request("GET", endpoint, **kwargs)
+
+    async def get_search_results(self, symbol: str, asset_type: str) -> list[dict[str, Any]]:
+        endpoint = f"iserver/secdef/search?symbol={symbol}&name=false&assetType={asset_type}"
+        response = self._cache.get(endpoint)
+        if response is None:
+            response = await self.get_request(endpoint)
+            self._cache.set(endpoint, response)
+        if isinstance(response, list) and all(isinstance(result, dict) for result in response):
+            return response
+        raise SymbolNotFoundError(symbol)
+
+    async def get_conid(
+            self, symbol: str,
+            primary_exchange: str | None = None,
+            asset_type: str = "STK" # Stock, OPT, FUT
+    ) -> int:
+        """
+        Get contract id for symbol.
+        Ambiguous results raise AmbiguousSymbolError,
+        and can be retried with specific primary_exchange or asset_type
+        """
+        result = await self.get_search_results(symbol, asset_type)
+        # the first result is assumed to be the correct/SMART choice, but this is not validated
+        return int(result[0]["conid"])
 
     async def aclose(self) -> None:
         await self.client.aclose()
