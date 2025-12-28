@@ -10,6 +10,7 @@ import httpx
 
 from option_analyzer.clients.cache import CacheInterface
 from option_analyzer.config import Settings
+from option_analyzer.models.domain import Stock
 from option_analyzer.utils.exceptions import IBKRAPIError, IBKRConnectionError, SymbolNotFoundError
 from option_analyzer.utils.rate_limiter import RateLimiter
 
@@ -106,10 +107,12 @@ class IBKRClient:
     async def get_search_results(
             self,
             symbol: str,
-            asset_type: str,
-            ttl: timedelta | None
+            asset_type: str | None=None,
+            ttl: timedelta | None=None
     ) -> list[dict[str, Any]]:
-        endpoint = f"iserver/secdef/search?symbol={symbol}&name=false&assetType={asset_type}"
+        endpoint = f"iserver/secdef/search?symbol={symbol}"
+        if asset_type is not None:
+            endpoint += f"&assetType={asset_type}"
         response = self._cache.get(endpoint)
         if response is None:
             response = await self.get_request(endpoint)
@@ -125,6 +128,38 @@ class IBKRClient:
         result = await self.get_search_results(symbol, asset_type, timedelta(hours=24))
         # the first result is assumed to be the correct/SMART choice, but this is not validated
         return int(result[0]["conid"])
+
+    async def get_market_snapshot(self, conid: int, ttl: timedelta | None) -> dict[str, float]:
+        """
+        Get current market data for given contract id.
+        Requested fields:
+        31: last price
+        84: bid price
+        86: ask price
+        """
+        endpoint = f"iserver/marketdata/snapshot?conids={conid}&fields=31,84,86"
+        response = self._cache.get(endpoint)
+        if response is None:
+            response = await self.get_request(endpoint)
+            self._cache.set(endpoint, response, ttl)
+        if not isinstance(response, list) and len(response) != 1:
+            raise IBKRAPIError("Invalid marked data snapshot")
+        return {"last": float(response[0]["31"]),
+                "bid": float(response[0]["84"]),
+                "ask": float(response[0]["86"])}
+        
+    async def get_stock(self, symbol: str) -> Stock:
+        results = await self.get_search_results(symbol)
+        conid = int(results[0]["conid"])
+        months = []
+        for section in results[0]["sections"]:
+            if section["secType"] == "OPT":
+                months = section["months"].split(";")
+        snapshot = await self.get_market_snapshot(conid, timedelta(seconds=5))
+        return Stock(symbol=symbol,
+                     current_price=snapshot["last"],
+                     conid=str(conid),
+                     available_expirations=months)
 
     async def aclose(self) -> None:
         await self.client.aclose()
