@@ -161,11 +161,11 @@ class IBKRClient:
             if section["secType"] == "OPT":
                 months = section["months"].split(";")
         snapshot = await self.get_market_snapshot(conid, timedelta(minutes=5))
-        if len(snapshot) != 0:
+        if len(snapshot) == 0:
             raise IBKRAPIError("Invalid marked data snapshot")
         return Stock(symbol=symbol,
                      current_price=snapshot[0]["last"],
-                     conid=str(conid),
+                     conid=conid,
                      available_expirations=months)
 
     async def get_option_strikes(
@@ -201,7 +201,7 @@ class IBKRClient:
         if not isinstance(response, list) or len(response) != 1:
             raise IBKRAPIError("Invalid contract info response")
         unpriced_contract =  OptionContract(
-            conid = str(response[0]["conid"]), # @kris turn str member into int
+            conid = int(response[0]["conid"]),
             strike = strike,
             right=right,
             expiration = datetime.strptime(response[0]["maturityDate"], "%Y%m%d").date()) # maturityDate is YYYYMMDD

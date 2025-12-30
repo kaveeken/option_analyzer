@@ -312,3 +312,194 @@ class TestGetSearchResults:
 
         with pytest.raises(SymbolNotFoundError):
             await client.get_search_results("INVALID", "STK", timedelta(hours=24))
+
+
+class TestGetStock:
+    """Test get_stock method that combines search and snapshot."""
+
+    @pytest.mark.asyncio
+    async def test_get_stock_success(self, client: IBKRClient) -> None:
+        """Test successful stock quote retrieval."""
+        # Mock search results with option expirations
+        mock_search = [
+            {
+                "conid": 265598,
+                "symbol": "AAPL",
+                "sections": [
+                    {"secType": "STK"},
+                    {"secType": "OPT", "months": "DEC24;JAN25;FEB25"},
+                ],
+            }
+        ]
+        # Mock market snapshot
+        mock_snapshot = [{"conid": 265598, "last": 150.25, "bid": 150.20, "ask": 150.30}]
+
+        client.get_search_results = AsyncMock(return_value=mock_search)
+        client.get_market_snapshot = AsyncMock(return_value=mock_snapshot)
+
+        stock = await client.get_stock("AAPL")
+
+        # Verify Stock object fields
+        assert stock.symbol == "AAPL"
+        assert stock.current_price == 150.25
+        assert stock.conid == 265598
+        assert stock.available_expirations == ["DEC24", "JAN25", "FEB25"]
+
+    @pytest.mark.asyncio
+    async def test_get_stock_uses_5min_cache_for_snapshot(
+        self, client: IBKRClient
+    ) -> None:
+        """Test that market snapshot uses 5-minute cache TTL."""
+        mock_search = [
+            {
+                "conid": 265598,
+                "symbol": "AAPL",
+                "sections": [{"secType": "OPT", "months": "DEC24"}],
+            }
+        ]
+        mock_snapshot = [{"conid": 265598, "last": 150.0, "bid": 149.95, "ask": 150.05}]
+
+        client.get_search_results = AsyncMock(return_value=mock_search)
+        client.get_market_snapshot = AsyncMock(return_value=mock_snapshot)
+
+        await client.get_stock("AAPL")
+
+        # Verify get_market_snapshot was called with 5min TTL
+        client.get_market_snapshot.assert_called_once_with(
+            265598, timedelta(minutes=5)
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_stock_no_option_sections(self, client: IBKRClient) -> None:
+        """Test stock with no option sections returns empty expirations."""
+        mock_search = [
+            {
+                "conid": 265598,
+                "symbol": "AAPL",
+                "sections": [{"secType": "STK"}],  # No OPT section
+            }
+        ]
+        mock_snapshot = [{"conid": 265598, "last": 150.0, "bid": 149.95, "ask": 150.05}]
+
+        client.get_search_results = AsyncMock(return_value=mock_search)
+        client.get_market_snapshot = AsyncMock(return_value=mock_snapshot)
+
+        stock = await client.get_stock("AAPL")
+
+        assert stock.available_expirations == []
+
+    @pytest.mark.asyncio
+    async def test_get_stock_empty_sections(self, client: IBKRClient) -> None:
+        """Test stock with empty sections array."""
+        mock_search = [
+            {
+                "conid": 265598,
+                "symbol": "AAPL",
+                "sections": [],  # Empty sections
+            }
+        ]
+        mock_snapshot = [{"conid": 265598, "last": 150.0, "bid": 149.95, "ask": 150.05}]
+
+        client.get_search_results = AsyncMock(return_value=mock_search)
+        client.get_market_snapshot = AsyncMock(return_value=mock_snapshot)
+
+        stock = await client.get_stock("AAPL")
+
+        assert stock.available_expirations == []
+
+    @pytest.mark.asyncio
+    async def test_get_stock_multiple_opt_sections(self, client: IBKRClient) -> None:
+        """Test that the last OPT section's months are used (loop overwrites)."""
+        mock_search = [
+            {
+                "conid": 265598,
+                "symbol": "AAPL",
+                "sections": [
+                    {"secType": "OPT", "months": "DEC24;JAN25"},
+                    {"secType": "OPT", "months": "FEB25;MAR25"},  # Last one wins
+                ],
+            }
+        ]
+        mock_snapshot = [{"conid": 265598, "last": 150.0, "bid": 149.95, "ask": 150.05}]
+
+        client.get_search_results = AsyncMock(return_value=mock_search)
+        client.get_market_snapshot = AsyncMock(return_value=mock_snapshot)
+
+        stock = await client.get_stock("AAPL")
+
+        # Last OPT section's months (implementation overwrites in loop)
+        assert stock.available_expirations == ["FEB25", "MAR25"]
+
+    @pytest.mark.asyncio
+    async def test_get_stock_conid_as_string_in_response(
+        self, client: IBKRClient
+    ) -> None:
+        """Test that conid is properly converted even if returned as string."""
+        mock_search = [
+            {
+                "conid": "265598",  # String instead of int
+                "symbol": "AAPL",
+                "sections": [],
+            }
+        ]
+        mock_snapshot = [{"conid": 265598, "last": 150.0, "bid": 149.95, "ask": 150.05}]
+
+        client.get_search_results = AsyncMock(return_value=mock_search)
+        client.get_market_snapshot = AsyncMock(return_value=mock_snapshot)
+
+        stock = await client.get_stock("AAPL")
+
+        assert stock.conid == 265598
+        assert isinstance(stock.conid, int)
+
+    @pytest.mark.asyncio
+    async def test_get_stock_symbol_not_found(self, client: IBKRClient) -> None:
+        """Test that symbol not found errors propagate."""
+        client.get_search_results = AsyncMock(
+            side_effect=SymbolNotFoundError("INVALID")
+        )
+
+        with pytest.raises(SymbolNotFoundError) as exc_info:
+            await client.get_stock("INVALID")
+
+        assert "INVALID" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_get_stock_api_error(self, client: IBKRClient) -> None:
+        """Test that API errors from search propagate."""
+        client.get_search_results = AsyncMock(
+            side_effect=IBKRAPIError("Error with status code 500")
+        )
+
+        with pytest.raises(IBKRAPIError) as exc_info:
+            await client.get_stock("AAPL")
+
+        assert "500" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_get_stock_snapshot_error(self, client: IBKRClient) -> None:
+        """Test that API errors from snapshot propagate."""
+        mock_search = [
+            {
+                "conid": 265598,
+                "symbol": "AAPL",
+                "sections": [],
+            }
+        ]
+        client.get_search_results = AsyncMock(return_value=mock_search)
+        client.get_market_snapshot = AsyncMock(
+            side_effect=IBKRAPIError("Snapshot error")
+        )
+
+        with pytest.raises(IBKRAPIError) as exc_info:
+            await client.get_stock("AAPL")
+
+        assert "Snapshot error" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_get_stock_connection_error(self, client: IBKRClient) -> None:
+        """Test that connection errors propagate."""
+        client.get_search_results = AsyncMock(side_effect=IBKRConnectionError())
+
+        with pytest.raises(IBKRConnectionError):
+            await client.get_stock("AAPL")
