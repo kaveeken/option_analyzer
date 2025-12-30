@@ -142,7 +142,7 @@ class IBKRClient:
         if response is None:
             response = await self.get_request(endpoint)
             self._cache.set(endpoint, response, ttl)
-        if not isinstance(response, list) and len(response) != 1:
+        if not isinstance(response, list) or len(response) != 1:
             raise IBKRAPIError("Invalid marked data snapshot")
         return {"last": float(response[0]["31"]),
                 "bid": float(response[0]["84"]),
@@ -155,7 +155,7 @@ class IBKRClient:
         for section in results[0]["sections"]:
             if section["secType"] == "OPT":
                 months = section["months"].split(";")
-        snapshot = await self.get_market_snapshot(conid, timedelta(seconds=5))
+        snapshot = await self.get_market_snapshot(conid, timedelta(minutes=5))
         return Stock(symbol=symbol,
                      current_price=snapshot["last"],
                      conid=str(conid),
