@@ -3,14 +3,14 @@
 import asyncio
 import logging
 import types
-from datetime import timedelta
-from typing import Any
+from datetime import date, datetime, timedelta
+from typing import Any, Literal
 
 import httpx
 
 from option_analyzer.clients.cache import CacheInterface
 from option_analyzer.config import Settings
-from option_analyzer.models.domain import Stock
+from option_analyzer.models.domain import OptionChain, OptionContract, Stock
 from option_analyzer.utils.exceptions import IBKRAPIError, IBKRConnectionError, SymbolNotFoundError
 from option_analyzer.utils.rate_limiter import RateLimiter
 
@@ -129,7 +129,7 @@ class IBKRClient:
         # the first result is assumed to be the correct/SMART choice, but this is not validated
         return int(result[0]["conid"])
 
-    async def get_market_snapshot(self, conid: int, ttl: timedelta | None) -> dict[str, float]:
+    async def get_market_snapshot(self, conid: int|str, ttl: timedelta | None) -> list[dict[str, float|int|None]]:
         """
         Get current market data for given contract id.
         Requested fields:
@@ -142,11 +142,16 @@ class IBKRClient:
         if response is None:
             response = await self.get_request(endpoint)
             self._cache.set(endpoint, response, ttl)
-        if not isinstance(response, list) or len(response) != 1:
+        if not isinstance(response, list) or len(response) == 0:
             raise IBKRAPIError("Invalid marked data snapshot")
-        return {"last": float(response[0]["31"]),
-                "bid": float(response[0]["84"]),
-                "ask": float(response[0]["86"])}
+        return [self._parse_market_snapshot(entry) for entry in response]
+
+    def _parse_market_snapshot(self, snapshot_entry: dict[str, Any]) -> dict[str, float|int|None]:
+        return {
+            "conid": int(snapshot_entry["conid"]),
+            "last": snapshot_entry.get("31", None),
+            "bid": snapshot_entry.get("84", None),
+            "ask": snapshot_entry.get("86", None)}
         
     async def get_stock(self, symbol: str) -> Stock:
         results = await self.get_search_results(symbol)
@@ -156,10 +161,87 @@ class IBKRClient:
             if section["secType"] == "OPT":
                 months = section["months"].split(";")
         snapshot = await self.get_market_snapshot(conid, timedelta(minutes=5))
+        if len(snapshot) != 0:
+            raise IBKRAPIError("Invalid marked data snapshot")
         return Stock(symbol=symbol,
-                     current_price=snapshot["last"],
+                     current_price=snapshot[0]["last"],
                      conid=str(conid),
                      available_expirations=months)
+
+    async def get_option_strikes(
+            self,
+            conid: int,
+            month: str,
+            ttl: timedelta | None
+            ) -> dict[str, list[float]]: # keep strikes as string instead of float
+        endpoint = f"iserver/secdef/strikes?conid={conid}&secType=OPT&month={month}"
+        response = self._cache.get(endpoint) # duplicate code
+        if response is None:
+            response = await self.get_request(endpoint)
+            self._cache.set(endpoint, response, ttl)
+        if not isinstance(response, dict) or len(response) != 2:
+            raise IBKRAPIError("Invalid option strikes")
+        return response
+
+    async def get_unpriced_option_contract(
+            self,
+            underlying_conid: int,
+            month: str,
+            right: Literal["C", "P"],
+            strike: float,
+            ttl: timedelta | None
+            ) -> OptionContract:
+        endpoint =\
+            f"iserver/secdef/info?conid={underlying_conid}&secType=OPT&month={month}" +\
+            f"&strike={strike}&right={right}"
+        response = self._cache.get(endpoint) # duplicate code
+        if response is None:
+            response = await self.get_request(endpoint)
+            self._cache.set(endpoint, response, ttl)
+        if not isinstance(response, list) or len(response) != 1:
+            raise IBKRAPIError("Invalid contract info response")
+        unpriced_contract =  OptionContract(
+            conid = str(response[0]["conid"]), # @kris turn str member into int
+            strike = strike,
+            right=right,
+            expiration = datetime.strptime(response[0]["maturityDate"], "%Y%m%d").date()) # maturityDate is YYYYMMDD
+        return unpriced_contract
+            
+    async def get_option_chain(
+            self,
+            conid: int,
+            month: str,
+            ) -> OptionChain:
+        """
+        Get the option chain for a given conid at a given month.
+        """
+        strikes = await self.get_option_strikes(conid, month, None) # ttl
+        conids_string = ""
+        calls = {}
+        puts = {}
+        for strike in strikes["call"]:
+            contract = await self.get_unpriced_option_contract(conid, month, "C", strike, None)
+            if len(conids_string) > 0:
+                conids_string += ","
+            conids_string += str(contract.conid)
+            calls[contract.conid] =  contract
+        for strike in strikes["put"]:
+            contract = await self.get_unpriced_option_contract(conid, month, "P", strike, None)
+            conids_string += ","
+            conids_string += str(contract.conid)
+            puts[contract.conid] =  contract
+        market_snapshot = await self.get_market_snapshot(conids_string, None)
+        for snapshot_element in market_snapshot:
+            contract_conid = snapshot_element["conid"]
+            if contract_conid in calls:
+                calls[contract_conid].ask = snapshot_element["86"]
+                calls[contract_conid].bid = snapshot_element["84"]
+            elif contract_conid in puts:
+                puts[contract_conid].ask = snapshot_element["86"]
+                puts[contract_conid].bid = snapshot_element["84"]
+            else:
+                raise IBKRAPIError("Market snapshot conid does not correspond to contract")
+
 
     async def aclose(self) -> None:
         await self.client.aclose()
