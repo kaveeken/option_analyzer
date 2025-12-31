@@ -119,21 +119,17 @@ class OptionContract(BaseModel):
 
 class OptionChain(BaseModel):
     """
-    Complete option chain for a symbol and expiration date.
+    Complete option chain for an expiration date.
 
     Attributes:
-        symbol: Stock ticker symbol (e.g., "AAPL")
         expiration: Option expiration date
         calls: List of call option contracts
         puts: List of put option contracts
-        underlying_price: Current price of underlying stock (optional)
     """
 
-    symbol: str
     expiration: date
     calls: list[OptionContract] = Field(default_factory=list)
     puts: list[OptionContract] = Field(default_factory=list)
-    underlying_price: float | None = Field(default=None, gt=0)
 
 
 class OptionPosition(BaseModel):

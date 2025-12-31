@@ -133,62 +133,36 @@ class TestOptionChain:
     def test_option_chain_creation(self, sample_call: OptionContract, sample_put: OptionContract) -> None:
         """Test basic option chain creation."""
         chain = OptionChain(
-            symbol="AAPL",
             expiration=date(2024, 12, 20),
             calls=[sample_call],
             puts=[sample_put],
-            underlying_price=100.0,
         )
 
-        assert chain.symbol == "AAPL"
         assert chain.expiration == date(2024, 12, 20)
         assert len(chain.calls) == 1
         assert len(chain.puts) == 1
-        assert chain.underlying_price == 100.0
         assert chain.calls[0] == sample_call
         assert chain.puts[0] == sample_put
 
     def test_option_chain_without_underlying_price(self, sample_call: OptionContract) -> None:
         """Test chain without underlying price."""
         chain = OptionChain(
-            symbol="AAPL",
             expiration=date(2024, 12, 20),
             calls=[sample_call],
             puts=[],
         )
 
-        assert chain.underlying_price is None
         assert len(chain.calls) == 1
         assert len(chain.puts) == 0
 
     def test_option_chain_empty_lists(self) -> None:
         """Test chain with no options."""
         chain = OptionChain(
-            symbol="AAPL",
             expiration=date(2024, 12, 20),
         )
 
         assert chain.calls == []
         assert chain.puts == []
-        assert chain.underlying_price is None
-
-    def test_option_chain_requires_positive_price(self, sample_call: OptionContract) -> None:
-        """Test that underlying price must be positive if provided."""
-        with pytest.raises(ValidationError):
-            OptionChain(
-                symbol="AAPL",
-                expiration=date(2024, 12, 20),
-                calls=[sample_call],
-                underlying_price=-10.0,
-            )
-
-        with pytest.raises(ValidationError):
-            OptionChain(
-                symbol="AAPL",
-                expiration=date(2024, 12, 20),
-                calls=[sample_call],
-                underlying_price=0.0,
-            )
 
     def test_option_chain_with_multiple_options(self) -> None:
         """Test chain with multiple calls and puts."""
@@ -226,11 +200,9 @@ class TestOptionChain:
         )
 
         chain = OptionChain(
-            symbol="AAPL",
             expiration=date(2024, 12, 20),
             calls=[call1, call2],
             puts=[put1, put2],
-            underlying_price=98.5,
         )
 
         assert len(chain.calls) == 2

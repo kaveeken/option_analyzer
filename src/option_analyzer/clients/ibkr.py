@@ -224,10 +224,8 @@ class IBKRClient:
         for strike in strikes["put"]:
             contract = await self.get_unpriced_option_contract(conid, month, "P", strike, None)
             puts[contract.conid] = contract
-        symbol = "PLACEHOLDER"  # @kris OptionChain either does not need a symbol member or can refer to a Stock
         expiration = list(calls.values())[0].expiration
         return OptionChain(
-            symbol=symbol,
             expiration=expiration,
             calls=calls.values,
             puts=puts.values)
