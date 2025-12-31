@@ -1059,3 +1059,335 @@ class TestGetOptionChain:
             await client.get_option_chain(265598, "JAN25")
 
         assert "Failed to get snapshot" in str(exc_info.value)
+
+
+class TestGetHistoricalData:
+    """Test get_historical_data method."""
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_success_1_year(self, client: IBKRClient) -> None:
+        """Test successful retrieval of 1 year historical data."""
+        mock_response = {
+            "symbol": "AAPL",
+            "data": [
+                {"t": 1672531200000, "o": 130.0, "h": 131.0, "l": 129.5, "c": 130.5, "v": 1000000},
+                {"t": 1672617600000, "o": 130.5, "h": 132.0, "l": 130.0, "c": 131.5, "v": 1100000},
+                {"t": 1672704000000, "o": 131.5, "h": 133.0, "l": 131.0, "c": 132.0, "v": 1200000},
+            ],
+        }
+        client.get_request = AsyncMock(return_value=mock_response)
+
+        result = await client.get_historical_data(265598, years=1)
+
+        # Verify return format
+        assert result["symbol"] == "AAPL"
+        assert "prices" in result
+        assert len(result["prices"]) == 3
+
+        # Verify price entries format
+        assert result["prices"][0]["date"] == "2023-01-01"
+        assert result["prices"][0]["close"] == 130.5
+        assert result["prices"][1]["date"] == "2023-01-02"
+        assert result["prices"][1]["close"] == 131.5
+        assert result["prices"][2]["date"] == "2023-01-03"
+        assert result["prices"][2]["close"] == 132.0
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_success_3_years(self, client: IBKRClient) -> None:
+        """Test successful retrieval of 3 years historical data (max)."""
+        mock_response = {
+            "symbol": "MSFT",
+            "data": [
+                {"t": 1577836800000, "o": 157.0, "h": 158.0, "l": 156.5, "c": 157.7, "v": 500000},
+                {"t": 1672531200000, "o": 235.0, "h": 237.0, "l": 234.5, "c": 236.5, "v": 600000},
+            ],
+        }
+        client.get_request = AsyncMock(return_value=mock_response)
+
+        result = await client.get_historical_data(265598, years=3)
+
+        assert result["symbol"] == "MSFT"
+        assert len(result["prices"]) == 2
+        # Verify endpoint was called with correct period
+        client.get_request.assert_called_once()
+        call_args = client.get_request.call_args[0][0]
+        assert "period=3y" in call_args
+        assert "bar=1d" in call_args
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_uses_cache(self, client: IBKRClient) -> None:
+        """Test that historical data uses cache on second call."""
+        mock_response = {
+            "symbol": "AAPL",
+            "data": [
+                {"t": 1672531200000, "o": 130.0, "h": 131.0, "l": 129.5, "c": 130.5, "v": 1000000},
+            ],
+        }
+        client.get_request = AsyncMock(return_value=mock_response)
+
+        # First call - hits API
+        result1 = await client.get_historical_data(265598, years=2)
+
+        # Second call - should use cache
+        result2 = await client.get_historical_data(265598, years=2)
+
+        # Should only call API once
+        assert client.get_request.call_count == 1
+        assert result1 == result2
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_cache_ttl_24h(self, client: IBKRClient) -> None:
+        """Test that cache uses 24-hour TTL."""
+        with patch.object(client._cache, "set") as mock_cache_set:
+            mock_response = {
+                "symbol": "AAPL",
+                "data": [{"t": 1672531200000, "o": 130.0, "h": 131.0, "l": 129.5, "c": 130.5, "v": 1000000}],
+            }
+            client.get_request = AsyncMock(return_value=mock_response)
+
+            await client.get_historical_data(265598, years=1)
+
+            # Verify cache.set was called with 24h TTL
+            assert mock_cache_set.called
+            call_args = mock_cache_set.call_args
+            # Third argument should be the TTL
+            assert call_args[0][2] == timedelta(hours=24)
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_default_years_3(self, client: IBKRClient) -> None:
+        """Test that default years parameter is 3."""
+        mock_response = {
+            "symbol": "AAPL",
+            "data": [{"t": 1672531200000, "o": 130.0, "h": 131.0, "l": 129.5, "c": 130.5, "v": 1000000}],
+        }
+        client.get_request = AsyncMock(return_value=mock_response)
+
+        # Call without years parameter (should default to 3)
+        result = await client.get_historical_data(265598)
+
+        # Verify endpoint was called with period=3y
+        client.get_request.assert_called_once()
+        call_args = client.get_request.call_args[0][0]
+        assert "period=3y" in call_args
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_invalid_years_negative(
+        self, client: IBKRClient
+    ) -> None:
+        """Test that negative years are clamped to 3."""
+        mock_response = {
+            "symbol": "AAPL",
+            "data": [{"t": 1672531200000, "o": 130.0, "h": 131.0, "l": 129.5, "c": 130.5, "v": 1000000}],
+        }
+        client.get_request = AsyncMock(return_value=mock_response)
+
+        # Call with invalid negative years
+        result = await client.get_historical_data(265598, years=-1)
+
+        # Should clamp to 3 years
+        client.get_request.assert_called_once()
+        call_args = client.get_request.call_args[0][0]
+        assert "period=3y" in call_args
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_invalid_years_zero(
+        self, client: IBKRClient
+    ) -> None:
+        """Test that zero years are clamped to 3."""
+        mock_response = {
+            "symbol": "AAPL",
+            "data": [{"t": 1672531200000, "o": 130.0, "h": 131.0, "l": 129.5, "c": 130.5, "v": 1000000}],
+        }
+        client.get_request = AsyncMock(return_value=mock_response)
+
+        result = await client.get_historical_data(265598, years=0)
+
+        # Should clamp to 3 years
+        client.get_request.assert_called_once()
+        call_args = client.get_request.call_args[0][0]
+        assert "period=3y" in call_args
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_invalid_years_too_large(
+        self, client: IBKRClient
+    ) -> None:
+        """Test that years > 3 are clamped to 3."""
+        mock_response = {
+            "symbol": "AAPL",
+            "data": [{"t": 1672531200000, "o": 130.0, "h": 131.0, "l": 129.5, "c": 130.5, "v": 1000000}],
+        }
+        client.get_request = AsyncMock(return_value=mock_response)
+
+        result = await client.get_historical_data(265598, years=5)
+
+        # Should clamp to 3 years
+        client.get_request.assert_called_once()
+        call_args = client.get_request.call_args[0][0]
+        assert "period=3y" in call_args
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_missing_data_field(
+        self, client: IBKRClient
+    ) -> None:
+        """Test that missing 'data' field raises IBKRAPIError."""
+        # Mock response without 'data' field
+        mock_response = {"symbol": "AAPL", "error": "no data"}
+        client.get_request = AsyncMock(return_value=mock_response)
+
+        with pytest.raises(IBKRAPIError) as exc_info:
+            await client.get_historical_data(265598, years=1)
+
+        assert "Historical data missing from response" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_connection_error(
+        self, client: IBKRClient
+    ) -> None:
+        """Test that connection failures raise IBKRConnectionError."""
+        client.get_request = AsyncMock(side_effect=IBKRConnectionError())
+
+        with pytest.raises(IBKRConnectionError):
+            await client.get_historical_data(265598, years=1)
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_api_error_500(self, client: IBKRClient) -> None:
+        """Test that server errors raise IBKRAPIError."""
+        client.get_request = AsyncMock(
+            side_effect=IBKRAPIError("Error with status code 500: Internal Server Error")
+        )
+
+        with pytest.raises(IBKRAPIError) as exc_info:
+            await client.get_historical_data(265598, years=1)
+
+        assert "500" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_api_error_400(self, client: IBKRClient) -> None:
+        """Test that client errors raise IBKRAPIError."""
+        client.get_request = AsyncMock(
+            side_effect=IBKRAPIError("Error with status code 400: Bad Request")
+        )
+
+        with pytest.raises(IBKRAPIError) as exc_info:
+            await client.get_historical_data(265598, years=1)
+
+        assert "400" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_date_format_iso(self, client: IBKRClient) -> None:
+        """Test that dates are formatted as ISO 8601 strings."""
+        mock_response = {
+            "symbol": "AAPL",
+            "data": [
+                {"t": 1704067200000, "o": 180.0, "h": 181.0, "l": 179.5, "c": 180.5, "v": 1000000},  # 2024-01-01
+            ],
+        }
+        client.get_request = AsyncMock(return_value=mock_response)
+
+        result = await client.get_historical_data(265598, years=1)
+
+        # Verify ISO 8601 date format (YYYY-MM-DD)
+        assert result["prices"][0]["date"] == "2024-01-01"
+        # Verify it's a string, not a date object
+        assert isinstance(result["prices"][0]["date"], str)
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_empty_data_list(
+        self, client: IBKRClient
+    ) -> None:
+        """Test that empty data list returns empty prices list."""
+        mock_response = {"symbol": "AAPL", "data": []}
+        client.get_request = AsyncMock(return_value=mock_response)
+
+        result = await client.get_historical_data(265598, years=1)
+
+        assert result["symbol"] == "AAPL"
+        assert result["prices"] == []
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_different_conids_different_cache(
+        self, client: IBKRClient
+    ) -> None:
+        """Test that different conids create separate cache entries."""
+        mock_response1 = {
+            "symbol": "AAPL",
+            "data": [{"t": 1672531200000, "o": 130.0, "h": 131.0, "l": 129.5, "c": 130.5, "v": 1000000}],
+        }
+        mock_response2 = {
+            "symbol": "MSFT",
+            "data": [{"t": 1672531200000, "o": 235.0, "h": 237.0, "l": 234.5, "c": 236.5, "v": 600000}],
+        }
+        client.get_request = AsyncMock(side_effect=[mock_response1, mock_response2])
+
+        result1 = await client.get_historical_data(265598, years=1)  # AAPL
+        result2 = await client.get_historical_data(456789, years=1)  # MSFT
+
+        # Should call API twice (different conids)
+        assert client.get_request.call_count == 2
+        assert result1["symbol"] == "AAPL"
+        assert result2["symbol"] == "MSFT"
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_different_years_different_cache(
+        self, client: IBKRClient
+    ) -> None:
+        """Test that different years create separate cache entries."""
+        mock_response1 = {
+            "symbol": "AAPL",
+            "data": [{"t": 1672531200000, "o": 130.0, "h": 131.0, "l": 129.5, "c": 130.5, "v": 1000000}],
+        }
+        mock_response2 = {
+            "symbol": "AAPL",
+            "data": [
+                {"t": 1640995200000, "o": 177.0, "h": 178.0, "l": 176.5, "c": 177.5, "v": 900000},
+                {"t": 1672531200000, "o": 130.0, "h": 131.0, "l": 129.5, "c": 130.5, "v": 1000000},
+            ],
+        }
+        client.get_request = AsyncMock(side_effect=[mock_response1, mock_response2])
+
+        result1 = await client.get_historical_data(265598, years=1)
+        result2 = await client.get_historical_data(265598, years=2)
+
+        # Should call API twice (different years)
+        assert client.get_request.call_count == 2
+        assert len(result1["prices"]) == 1
+        assert len(result2["prices"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_close_price_extraction(
+        self, client: IBKRClient
+    ) -> None:
+        """Test that only close prices are extracted from OHLCV data."""
+        mock_response = {
+            "symbol": "AAPL",
+            "data": [
+                {"t": 1672531200000, "o": 130.0, "h": 135.0, "l": 128.0, "c": 132.5, "v": 1000000},
+            ],
+        }
+        client.get_request = AsyncMock(return_value=mock_response)
+
+        result = await client.get_historical_data(265598, years=1)
+
+        # Verify only close price is in result
+        assert result["prices"][0]["close"] == 132.5
+        # Verify no other OHLCV fields
+        assert "open" not in result["prices"][0]
+        assert "high" not in result["prices"][0]
+        assert "low" not in result["prices"][0]
+        assert "volume" not in result["prices"][0]
+
+    @pytest.mark.asyncio
+    async def test_get_historical_data_endpoint_format(self, client: IBKRClient) -> None:
+        """Test that endpoint is correctly formatted."""
+        mock_response = {
+            "symbol": "AAPL",
+            "data": [{"t": 1672531200000, "o": 130.0, "h": 131.0, "l": 129.5, "c": 130.5, "v": 1000000}],
+        }
+        client.get_request = AsyncMock(return_value=mock_response)
+
+        await client.get_historical_data(265598, years=2)
+
+        # Verify endpoint format
+        client.get_request.assert_called_once()
+        call_args = client.get_request.call_args[0][0]
+        assert call_args == "iserver/marketdata/history?conid=265598&period=2y&bar=1d"
