@@ -207,7 +207,7 @@ class IBKRClient:
             expiration = datetime.strptime(response[0]["maturityDate"], "%Y%m%d").date()) # maturityDate is YYYYMMDD
         return unpriced_contract
             
-    async def get_option_chain(
+    async def get_unprice_option_chain(
             self,
             conid: int,
             month: str,
@@ -216,31 +216,46 @@ class IBKRClient:
         Get the option chain for a given conid at a given month.
         """
         strikes = await self.get_option_strikes(conid, month, None) # ttl
-        conids_string = ""
         calls = {}
         puts = {}
         for strike in strikes["call"]:
             contract = await self.get_unpriced_option_contract(conid, month, "C", strike, None)
-            if len(conids_string) > 0:
-                conids_string += ","
-            conids_string += str(contract.conid)
-            calls[contract.conid] =  contract
+            calls[contract.conid] = contract
         for strike in strikes["put"]:
             contract = await self.get_unpriced_option_contract(conid, month, "P", strike, None)
-            conids_string += ","
-            conids_string += str(contract.conid)
-            puts[contract.conid] =  contract
-        market_snapshot = await self.get_market_snapshot(conids_string, None)
+            puts[contract.conid] = contract
+        symbol = "PLACEHOLDER"  # @kris OptionChain either does not need a symbol member or can refer to a Stock
+        expiration = list(calls.values())[0].expiration
+        return OptionChain(
+            symbol=symbol,
+            expiration=expiration,
+            calls=calls.values,
+            puts=puts.values)
+
+    async def price_option_chain(self, chain: OptionChain) -> None:
+        conids = [str(contract.conid) for contract in [*chain.calls, *chain.puts]]
+        market_snapshot = await self.get_market_snapshot(",".join(conids), None)
         for snapshot_element in market_snapshot:
             contract_conid = snapshot_element["conid"]
-            if contract_conid in calls:
-                calls[contract_conid].ask = snapshot_element["86"]
-                calls[contract_conid].bid = snapshot_element["84"]
-            elif contract_conid in puts:
-                puts[contract_conid].ask = snapshot_element["86"]
-                puts[contract_conid].bid = snapshot_element["84"]
-            else:
+            assert isinstance(contract_conid, int) # move sanity check elsewhere? or raise
+            found = False
+            for call in chain.calls:
+                if call.conid == contract_conid:
+                    call.ask = snapshot_element["ask"]
+                    call.bid = snapshot_element["bid"]
+                    found = True
+                    break
+            if found:
+                continue
+            for put in chain.puts:
+                if put.conid == contract_conid:
+                    put.ask = snapshot_element["ask"]
+                    put.bid = snapshot_element["bid"]
+                    found = True
+                    break
+            if not found:
                 raise IBKRAPIError("Market snapshot conid does not correspond to contract")
+        
 
 
     async def aclose(self) -> None:
