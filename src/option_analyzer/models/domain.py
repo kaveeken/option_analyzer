@@ -34,7 +34,7 @@ class Stock(BaseModel):
 
     symbol: str
     current_price: float = Field(gt=0, description="Current stock price (must be positive)")
-    conid: int
+    conid: int # @todo l3b
     available_expirations: list[str] = Field(default_factory=list)
 
     def payoff_at_price(self, price: float) -> float:
@@ -64,7 +64,7 @@ class OptionContract(BaseModel):
         multiplier: Shares per contract (typically 100)
     """
 
-    conid: int
+    conid: int # @todo l3b
     strike: float = Field(gt=0)
     right: Literal["C", "P"]
     expiration: date
