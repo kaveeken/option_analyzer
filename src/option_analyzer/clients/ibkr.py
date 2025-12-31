@@ -281,5 +281,23 @@ class IBKRClient:
         await self.price_option_chain(chain)
         return chain
 
+    async def get_historical_data(self, conid: int, years: int = 3) -> dict[str, Any]:
+        if years <= 0 or years > 3: # @todo myc: handle chunking
+            logger.warning("Years must be between 1 and 3")
+            years = 3
+        endpoint = f"iserver/marketdata/history?conid={conid}&period={years}y&bar=1d"
+        response = self._cache.get(endpoint)
+        if response is None:
+            response = await self.get_request(endpoint)
+            self._cache.set(endpoint, response, timedelta(hours=24))
+        if "data" not in response:
+            raise IBKRAPIError("Historical data missing from response")
+        ohlct_list = response["data"]
+        closes = [{"date": datetime.fromtimestamp(ohlct["t"] / 1000).date().isoformat(),
+                   "close": ohlct["c"]}
+                  for ohlct in ohlct_list]
+        return {"symbol": response["symbol"],
+                "prices": closes}
+
     async def aclose(self) -> None:
         await self.client.aclose()
