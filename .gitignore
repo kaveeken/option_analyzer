@@ -59,9 +59,13 @@ dmypy.json
 
 # Local development files
 sandbox.py
+plan.md
 PLAYGROUND.md
 *_REVIEW.md
 *_REQUIREMENTS.md
+*_PLAN.md
+AGENTS.md
+@AGENTS.md
 
 # Beads issue tracker (optional - remove this if you want to track beads in git)
 .beads/last-touched
