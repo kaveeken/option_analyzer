@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+
+# IDE & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+\#*\#
+.\#*
+
+# Testing & Coverage
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.pytest_cache/
+.hypothesis/
+coverage.json
+.cache
+
+# Build & Distribution
+build/
+dist/
+*.egg-info/
+*.egg
+wheels/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# pytype
+.pytype/
+
+# Logs
+*.log
+
+# Local development files
+sandbox.py
+PLAYGROUND.md
+*_REVIEW.md
+*_REQUIREMENTS.md
+
+# Beads issue tracker (optional - remove this if you want to track beads in git)
+.beads/last-touched
