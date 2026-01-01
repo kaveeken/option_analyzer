@@ -94,3 +94,43 @@ class OptionChainResponse(BaseModel):
     expiration: date = Field(description="Option expiration date")
     calls: list[OptionContractResponse] = Field(description="Call option contracts")
     puts: list[OptionContractResponse] = Field(description="Put option contracts")
+
+
+class StrategyInitRequest(BaseModel):
+    """
+    Request to initialize a new strategy.
+
+    Attributes:
+        symbol: Stock ticker symbol
+    """
+
+    symbol: str = Field(
+        description="Stock ticker symbol",
+        examples=["AAPL"],
+        min_length=1,
+        max_length=10,
+    )
+
+
+class StrategyInitResponse(BaseModel):
+    """
+    Response from strategy initialization.
+
+    Attributes:
+        symbol: Stock ticker symbol
+        current_price: Current stock price
+        target_date: Automatically selected target expiration date
+        available_expirations: All available expiration months
+        session_id: Session ID for subsequent requests
+    """
+
+    symbol: str = Field(description="Stock ticker symbol")
+    current_price: float = Field(description="Current stock price")
+    target_date: str = Field(
+        description="Automatically selected target expiration (earliest)",
+        examples=["JAN26"],
+    )
+    available_expirations: list[str] = Field(
+        description="All available expiration months"
+    )
+    session_id: str = Field(description="Session ID for subsequent requests")

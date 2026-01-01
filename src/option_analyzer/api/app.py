@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from ..config import get_settings
 from ..services.session import get_session_service
 from .middleware import error_handler_middleware
-from .routes import health, stocks
+from .routes import health, stocks, strategy
 
 
 # Background task control
@@ -109,5 +109,6 @@ def create_app() -> FastAPI:
     # Register routes
     app.include_router(health.router)
     app.include_router(stocks.router)
+    app.include_router(strategy.router)
 
     return app
