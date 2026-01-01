@@ -134,3 +134,67 @@ class StrategyInitResponse(BaseModel):
         description="All available expiration months"
     )
     session_id: str = Field(description="Session ID for subsequent requests")
+
+
+class AddPositionRequest(BaseModel):
+    """
+    Request to add an option position to the strategy.
+
+    Attributes:
+        conid: IBKR contract identifier for the option
+        quantity: Number of contracts (positive=long, negative=short, cannot be 0)
+    """
+
+    conid: int = Field(description="IBKR contract identifier", examples=[123456])
+    quantity: int = Field(
+        description="Number of contracts (positive=long, negative=short)",
+        examples=[1, -2],
+    )
+
+
+class ModifyPositionRequest(BaseModel):
+    """
+    Request to modify an existing position's quantity.
+
+    Attributes:
+        quantity: New quantity (positive=long, negative=short, cannot be 0)
+    """
+
+    quantity: int = Field(
+        description="New quantity (positive=long, negative=short)",
+        examples=[2, -1],
+    )
+
+
+class PositionResponse(BaseModel):
+    """
+    Option position details.
+
+    Attributes:
+        conid: IBKR contract identifier
+        strike: Strike price
+        right: Option type (C=call, P=put)
+        expiration: Expiration date
+        quantity: Number of contracts
+        bid: Bid price per share
+        ask: Ask price per share
+    """
+
+    conid: int = Field(description="IBKR contract identifier")
+    strike: float = Field(description="Strike price")
+    right: str = Field(description="Option type", examples=["C", "P"])
+    expiration: date = Field(description="Expiration date")
+    quantity: int = Field(description="Number of contracts")
+    bid: float | None = Field(description="Bid price per share")
+    ask: float | None = Field(description="Ask price per share")
+
+
+class PositionsResponse(BaseModel):
+    """
+    List of all positions in the strategy.
+
+    Attributes:
+        positions: List of option positions
+    """
+
+    positions: list[PositionResponse] = Field(description="List of option positions")
