@@ -14,6 +14,7 @@ import pytest
 from pydantic import ValidationError
 
 from option_analyzer.models.domain import (
+    OptionChain,
     OptionContract,
     OptionPosition,
     Stock,
@@ -33,7 +34,7 @@ class TestStock:
         """Test basic stock creation."""
         assert sample_stock.symbol == "AAPL"
         assert sample_stock.current_price == 100.0
-        assert sample_stock.conid == "265598"
+        assert sample_stock.conid == 265598
         assert len(sample_stock.available_expirations) == 3
 
     def test_stock_payoff_at_price(self, sample_stock: Stock) -> None:
@@ -48,10 +49,10 @@ class TestStock:
     def test_stock_requires_positive_price(self) -> None:
         """Test that stock price must be positive."""
         with pytest.raises(ValidationError):
-            Stock(symbol="AAPL", current_price=-10.0, conid="265598")
+            Stock(symbol="AAPL", current_price=-10.0, conid=265598)
 
         with pytest.raises(ValidationError):
-            Stock(symbol="AAPL", current_price=0.0, conid="265598")
+            Stock(symbol="AAPL", current_price=0.0, conid=265598)
 
 
 class TestOptionContract:
@@ -79,7 +80,7 @@ class TestOptionContract:
         """Test days to expiry calculation."""
         future = date.today() + timedelta(days=30)
         contract = OptionContract(
-            conid="12345",
+            conid=12345,
             strike=100.0,
             right="C",
             expiration=future,
@@ -98,7 +99,7 @@ class TestOptionContract:
         """Test that days_to_expiry raises ValueError for expired options."""
         past = date.today() - timedelta(days=10)
         contract = OptionContract(
-            conid="12345",
+            conid=12345,
             strike=100.0,
             right="C",
             expiration=past,
@@ -119,11 +120,97 @@ class TestOptionContract:
         """Test that strike must be positive."""
         with pytest.raises(ValidationError):
             OptionContract(
-                conid="12345",
+                conid=12345,
                 strike=-100.0,
                 right="C",
                 expiration=date(2024, 12, 20),
             )
+
+
+class TestOptionChain:
+    """Test OptionChain model."""
+
+    def test_option_chain_creation(self, sample_call: OptionContract, sample_put: OptionContract) -> None:
+        """Test basic option chain creation."""
+        chain = OptionChain(
+            expiration=date(2024, 12, 20),
+            calls=[sample_call],
+            puts=[sample_put],
+        )
+
+        assert chain.expiration == date(2024, 12, 20)
+        assert len(chain.calls) == 1
+        assert len(chain.puts) == 1
+        assert chain.calls[0] == sample_call
+        assert chain.puts[0] == sample_put
+
+    def test_option_chain_without_underlying_price(self, sample_call: OptionContract) -> None:
+        """Test chain without underlying price."""
+        chain = OptionChain(
+            expiration=date(2024, 12, 20),
+            calls=[sample_call],
+            puts=[],
+        )
+
+        assert len(chain.calls) == 1
+        assert len(chain.puts) == 0
+
+    def test_option_chain_empty_lists(self) -> None:
+        """Test chain with no options."""
+        chain = OptionChain(
+            expiration=date(2024, 12, 20),
+        )
+
+        assert chain.calls == []
+        assert chain.puts == []
+
+    def test_option_chain_with_multiple_options(self) -> None:
+        """Test chain with multiple calls and puts."""
+        call1 = OptionContract(
+            conid=12345,
+            strike=95.0,
+            right="C",
+            expiration=date(2024, 12, 20),
+            bid=7.0,
+            ask=7.5,
+        )
+        call2 = OptionContract(
+            conid=12346,
+            strike=100.0,
+            right="C",
+            expiration=date(2024, 12, 20),
+            bid=5.0,
+            ask=5.5,
+        )
+        put1 = OptionContract(
+            conid=12347,
+            strike=95.0,
+            right="P",
+            expiration=date(2024, 12, 20),
+            bid=2.5,
+            ask=3.0,
+        )
+        put2 = OptionContract(
+            conid=12348,
+            strike=100.0,
+            right="P",
+            expiration=date(2024, 12, 20),
+            bid=3.0,
+            ask=3.5,
+        )
+
+        chain = OptionChain(
+            expiration=date(2024, 12, 20),
+            calls=[call1, call2],
+            puts=[put1, put2],
+        )
+
+        assert len(chain.calls) == 2
+        assert len(chain.puts) == 2
+        assert chain.calls[0].strike == 95.0
+        assert chain.calls[1].strike == 100.0
+        assert chain.puts[0].strike == 95.0
+        assert chain.puts[1].strike == 100.0
 
 
 class TestOptionPosition:
@@ -190,7 +277,7 @@ class TestOptionPosition:
     def test_missing_bid_ask_handling(self) -> None:
         """Test that missing bid/ask prices raise MissingBidAskError."""
         contract = OptionContract(
-            conid="12345",
+            conid=12345,
             strike=100.0,
             right="C",
             expiration=date(2024, 12, 20),
@@ -286,7 +373,7 @@ class TestStrategy:
     def test_get_earliest_expiration(self, sample_stock: Stock) -> None:
         """Test earliest expiration calculation."""
         early_call = OptionContract(
-            conid="12345",
+            conid=12345,
             strike=100.0,
             right="C",
             expiration=date(2024, 12, 20),
@@ -294,7 +381,7 @@ class TestStrategy:
             ask=5.5,
         )
         late_call = OptionContract(
-            conid="12346",
+            conid=12346,
             strike=105.0,
             right="C",
             expiration=date(2025, 1, 17),
@@ -320,7 +407,7 @@ class TestStrategy:
     def test_validate_single_expiration_pass(self, sample_stock: Stock) -> None:
         """Test single expiration validation passes."""
         call1 = OptionContract(
-            conid="12345",
+            conid=12345,
             strike=100.0,
             right="C",
             expiration=date(2024, 12, 20),
@@ -328,7 +415,7 @@ class TestStrategy:
             ask=5.5,
         )
         call2 = OptionContract(
-            conid="12346",
+            conid=12346,
             strike=105.0,
             right="C",
             expiration=date(2024, 12, 20),
@@ -349,7 +436,7 @@ class TestStrategy:
     def test_validate_single_expiration_fail(self, sample_stock: Stock) -> None:
         """Test single expiration validation fails with mixed dates."""
         call1 = OptionContract(
-            conid="12345",
+            conid=12345,
             strike=100.0,
             right="C",
             expiration=date(2024, 12, 20),
@@ -357,7 +444,7 @@ class TestStrategy:
             ask=5.5,
         )
         call2 = OptionContract(
-            conid="12346",
+            conid=12346,
             strike=105.0,
             right="C",
             expiration=date(2025, 1, 17),
@@ -418,7 +505,7 @@ class TestStrategy:
     def test_validate_for_analysis_mixed_expiration(self, sample_stock: Stock) -> None:
         """Test that mixed expiration dates raise MixedExpirationError."""
         call1 = OptionContract(
-            conid="12345",
+            conid=12345,
             strike=100.0,
             right="C",
             expiration=date(2024, 12, 20),
@@ -426,7 +513,7 @@ class TestStrategy:
             ask=5.5,
         )
         call2 = OptionContract(
-            conid="12346",
+            conid=12346,
             strike=105.0,
             right="C",
             expiration=date(2025, 1, 17),
@@ -448,7 +535,7 @@ class TestStrategy:
     def test_validate_for_analysis_missing_bid(self, sample_stock: Stock) -> None:
         """Test that missing bid raises MissingBidAskError."""
         call = OptionContract(
-            conid="12345",
+            conid=12345,
             strike=100.0,
             right="C",
             expiration=date(2024, 12, 20),
@@ -467,7 +554,7 @@ class TestStrategy:
     def test_validate_for_analysis_missing_ask(self, sample_stock: Stock) -> None:
         """Test that missing ask raises MissingBidAskError."""
         call = OptionContract(
-            conid="12345",
+            conid=12345,
             strike=100.0,
             right="C",
             expiration=date(2024, 12, 20),
@@ -486,7 +573,7 @@ class TestStrategy:
     def test_validate_for_analysis_missing_both_bid_ask(self, sample_stock: Stock) -> None:
         """Test that missing both bid and ask raises MissingBidAskError."""
         call = OptionContract(
-            conid="12345",
+            conid=12345,
             strike=100.0,
             right="C",
             expiration=date(2024, 12, 20),

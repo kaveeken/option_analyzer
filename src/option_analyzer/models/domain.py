@@ -4,6 +4,7 @@ Core domain models for option analysis.
 These models represent the fundamental business objects:
 - Stock: Underlying security
 - OptionContract: Individual option contract details
+- OptionChain: Complete option chain for a symbol and expiration
 - OptionPosition: A position (long/short) in an option contract
 - Strategy: Complete trading strategy with stock and option positions
 """
@@ -33,8 +34,8 @@ class Stock(BaseModel):
 
     symbol: str
     current_price: float = Field(gt=0, description="Current stock price (must be positive)")
-    conid: str
-    available_expirations: list[date] = Field(default_factory=list)
+    conid: int # @todo l3b
+    available_expirations: list[str] = Field(default_factory=list)
 
     def payoff_at_price(self, price: float) -> float:
         """
@@ -63,7 +64,7 @@ class OptionContract(BaseModel):
         multiplier: Shares per contract (typically 100)
     """
 
-    conid: str
+    conid: int # @todo l3b
     strike: float = Field(gt=0)
     right: Literal["C", "P"]
     expiration: date
@@ -114,6 +115,21 @@ class OptionContract(BaseModel):
             )
 
         return days
+
+
+class OptionChain(BaseModel):
+    """
+    Complete option chain for an expiration date.
+
+    Attributes:
+        expiration: Option expiration date
+        calls: List of call option contracts
+        puts: List of put option contracts
+    """
+
+    expiration: date
+    calls: list[OptionContract] = Field(default_factory=list)
+    puts: list[OptionContract] = Field(default_factory=list)
 
 
 class OptionPosition(BaseModel):
