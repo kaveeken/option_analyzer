@@ -5,14 +5,48 @@ Provides reusable dependencies for routes to access configuration,
 clients, and services.
 """
 
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import Cookie, Depends
 
+from ..clients.cache import InMemoryCache
 from ..clients.ibkr import IBKRClient
 from ..config import Settings, get_settings
 from ..models.session import SessionState
 from ..services.session import SessionService, get_session_service
+from ..utils.rate_limiter import RateLimiter
+
+# Global singletons
+_cache: InMemoryCache | None = None
+_rate_limiter: RateLimiter | None = None
+
+
+def get_cache() -> InMemoryCache:
+    """
+    Get or create global cache instance.
+
+    Returns:
+        InMemoryCache singleton with 5-minute default TTL
+    """
+    global _cache
+    if _cache is None:
+        _cache = InMemoryCache(default_ttl=timedelta(minutes=5))
+    return _cache
+
+
+def get_rate_limiter() -> RateLimiter:
+    """
+    Get or create global rate limiter instance.
+
+    Returns:
+        RateLimiter singleton allowing 50 requests per 60 seconds
+    """
+    global _rate_limiter
+    if _rate_limiter is None:
+        # IBKR limits: ~50 requests per minute is a safe default
+        _rate_limiter = RateLimiter(max_requests=50, per_seconds=60)
+    return _rate_limiter
 
 
 def get_ibkr_client(
@@ -28,15 +62,13 @@ def get_ibkr_client(
         Configured IBKRClient instance
 
     Note:
-        This creates a new client instance per request. For production,
-        consider connection pooling or client lifecycle management.
+        Creates a new client instance per request, but reuses
+        global cache and rate_limiter singletons.
     """
     return IBKRClient(
-        base_url=settings.ibkr_base_url,
-        timeout=settings.ibkr_timeout,
-        verify_ssl=settings.ibkr_verify_ssl,
-        max_retries=settings.ibkr_max_retries,
-        retry_delay=settings.ibkr_retry_delay,
+        settings=settings,
+        cache=get_cache(),
+        rate_limiter=get_rate_limiter(),
     )
 
 
