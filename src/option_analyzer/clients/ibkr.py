@@ -149,12 +149,16 @@ class IBKRClient:
         response = self._cache.get(endpoint) # duplicate code
         if response is None:
             response = await self.get_request(endpoint)
+            if not isinstance(response, list) or len(response) == 0:
+                raise IBKRAPIError("Invalid marked data snapshot")
             if response[0].get("31", None) is None \
                and response[0].get("84") is None \
                and response[0].get("86") is None:
                 # first request counts as pre-flight request. check @todo fbq
                 await asyncio.sleep(self._calculate_backoff(1))
                 response = await self.get_request(endpoint)
+                if not isinstance(response, list) or len(response) == 0:
+                    raise IBKRAPIError("Invalid marked data snapshot")
             self._cache.set(endpoint, response, ttl)
         if not isinstance(response, list) or len(response) == 0:
             raise IBKRAPIError("Invalid marked data snapshot")
