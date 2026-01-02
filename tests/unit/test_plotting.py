@@ -2,7 +2,6 @@
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import pytest
@@ -10,6 +9,7 @@ import pytest
 from option_analyzer.utils.plotting import (
     PlotGenerationError,
     cleanup_plot,
+    create_strategy_chart,
     ensure_plots_directory,
     run_plot_operation,
 )
@@ -136,4 +136,127 @@ class TestCleanup:
         plt.close(fig)
 
         # Should not raise even if already closed
+        cleanup_plot(fig)
+
+
+class TestStrategyChart:
+    """Test strategy chart generation."""
+
+    @pytest.fixture
+    def mock_bins(self):
+        """Create mock price bins for testing."""
+        from option_analyzer.services.statistics import PriceBin
+
+        return [
+            PriceBin(lower=145.0, upper=150.0, count=100, midpoint=147.5),
+            PriceBin(lower=150.0, upper=155.0, count=200, midpoint=152.5),
+            PriceBin(lower=155.0, upper=160.0, count=150, midpoint=157.5),
+        ]
+
+    @pytest.fixture
+    def mock_strategy(self):
+        """Create mock strategy for testing."""
+        from datetime import date
+
+        from option_analyzer.models.domain import (
+            OptionContract,
+            OptionPosition,
+            Stock,
+            Strategy,
+        )
+
+        # Create a simple call spread strategy
+        stock = Stock(symbol="TEST", current_price=150.0, conid=12345)
+        call_long = OptionContract(
+            conid=111,
+            strike=145.0,
+            right="C",
+            expiration=date(2026, 1, 15),
+            bid=6.0,
+            ask=6.5,
+        )
+        call_short = OptionContract(
+            conid=222,
+            strike=155.0,
+            right="C",
+            expiration=date(2026, 1, 15),
+            bid=2.0,
+            ask=2.5,
+        )
+
+        positions = [
+            OptionPosition(contract=call_long, quantity=1),
+            OptionPosition(contract=call_short, quantity=-1),
+        ]
+
+        return Strategy(stock=stock, option_positions=positions)
+
+    def test_create_strategy_chart_success(self, mock_bins, mock_strategy):
+        """Test successful chart generation."""
+        fig = create_strategy_chart(mock_bins, mock_strategy)
+
+        assert fig is not None
+        assert len(fig.axes) == 2  # Primary and secondary axis
+
+        # Check that both axes exist
+        ax1 = fig.axes[0]
+        ax2 = fig.axes[1]
+
+        # Verify histogram bars on primary axis
+        assert len(ax1.patches) == len(mock_bins)
+
+        # Verify P&L line on secondary axis
+        assert len(ax2.lines) >= 1  # At least P&L line (plus zero line)
+
+        cleanup_plot(fig)
+
+    def test_create_strategy_chart_labels(self, mock_bins, mock_strategy):
+        """Test chart has proper labels and title."""
+        fig = create_strategy_chart(mock_bins, mock_strategy)
+
+        ax1 = fig.axes[0]
+        ax2 = fig.axes[1]
+
+        # Check labels
+        assert "Stock Price" in ax1.get_xlabel()
+        assert "Frequency" in ax1.get_ylabel()
+        assert "Profit/Loss" in ax2.get_ylabel()
+
+        # Check title exists (either suptitle or axes title)
+        has_title = (
+            (fig._suptitle is not None and len(fig._suptitle.get_text()) > 0)
+            or any(len(ax.get_title()) > 0 for ax in fig.axes)
+        )
+        assert has_title
+
+        cleanup_plot(fig)
+
+    def test_create_strategy_chart_legend(self, mock_bins, mock_strategy):
+        """Test chart has legend."""
+        fig = create_strategy_chart(mock_bins, mock_strategy)
+
+        ax1 = fig.axes[0]
+        legend = ax1.get_legend()
+
+        assert legend is not None
+        assert len(legend.get_texts()) >= 2  # Should have both histogram and P&L
+
+        cleanup_plot(fig)
+
+    def test_create_strategy_chart_empty_bins(self, mock_strategy):
+        """Test chart generation with empty bins raises error."""
+        with pytest.raises(PlotGenerationError):
+            create_strategy_chart([], mock_strategy)
+
+    def test_create_strategy_chart_single_bin(self, mock_strategy):
+        """Test chart generation with single bin."""
+        from option_analyzer.services.statistics import PriceBin
+
+        single_bin = [PriceBin(lower=145.0, upper=150.0, count=100, midpoint=147.5)]
+
+        fig = create_strategy_chart(single_bin, mock_strategy)
+
+        assert fig is not None
+        assert len(fig.axes) == 2
+
         cleanup_plot(fig)

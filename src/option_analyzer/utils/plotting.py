@@ -6,9 +6,10 @@ thread pool executor.
 """
 
 import asyncio
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Callable, TypeVar
+from typing import TypeVar
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -96,3 +97,103 @@ def cleanup_plot(fig: matplotlib.figure.Figure) -> None:
     except Exception:
         # Ignore cleanup errors
         pass
+
+
+def create_strategy_chart(bins: list, strategy) -> matplotlib.figure.Figure:
+    """
+    Generate dual-axis chart with price distribution histogram and P&L curve.
+
+    Creates a matplotlib figure with:
+    - Primary axis: Histogram showing strike price distribution
+    - Secondary axis: P&L curve showing strategy payoff across price range
+
+    Args:
+        bins: List of PriceBin objects with lower, upper, count, and midpoint
+        strategy: Strategy object with total_payoff(price) method
+
+    Returns:
+        Matplotlib Figure object with the dual-axis chart
+
+    Raises:
+        PlotGenerationError: If chart generation fails
+
+    Example:
+        >>> fig = create_strategy_chart(price_bins, strategy)
+        >>> fig.savefig('strategy_analysis.png')
+        >>> cleanup_plot(fig)
+
+    Note:
+        This function should be called within run_plot_operation() for
+        thread-safe async execution.
+    """
+    try:
+        # Validate inputs
+        if not bins:
+            raise ValueError("Cannot create chart with empty bins list")
+
+        # Create figure and primary axis
+        fig, ax1 = plt.subplots(figsize=(12, 7))
+
+        # Extract data from bins
+        midpoints = [bin.midpoint for bin in bins]
+        counts = [bin.count for bin in bins]
+        bin_width = bins[1].upper - bins[1].lower if len(bins) > 1 else 1.0
+
+        # Plot histogram on primary axis
+        ax1.bar(
+            midpoints,
+            counts,
+            width=bin_width * 0.9,
+            alpha=0.6,
+            color='steelblue',
+            edgecolor='darkblue',
+            linewidth=0.5,
+            label='Price Distribution'
+        )
+        ax1.set_xlabel('Stock Price at Expiration ($)', fontsize=12, fontweight='bold')
+        ax1.set_ylabel('Frequency (Simulation Count)', fontsize=12, fontweight='bold', color='steelblue')
+        ax1.tick_params(axis='y', labelcolor='steelblue')
+        ax1.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
+
+        # Create secondary axis for P&L curve
+        ax2 = ax1.twinx()
+
+        # Calculate P&L at each midpoint
+        pnl_values = [strategy.total_payoff(price) for price in midpoints]
+
+        # Plot P&L curve on secondary axis
+        ax2.plot(
+            midpoints,
+            pnl_values,
+            color='darkred',
+            linewidth=2.5,
+            label='P&L Curve',
+            marker='',
+            linestyle='-'
+        )
+        ax2.set_ylabel('Profit/Loss ($)', fontsize=12, fontweight='bold', color='darkred')
+        ax2.tick_params(axis='y', labelcolor='darkred')
+
+        # Add zero line for P&L reference
+        ax2.axhline(y=0, color='black', linestyle='--', linewidth=1.0, alpha=0.5)
+
+        # Set title
+        plt.title(
+            'Strategy Analysis: Price Distribution & P&L Curve',
+            fontsize=14,
+            fontweight='bold',
+            pad=20
+        )
+
+        # Combine legends from both axes
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left', fontsize=10)
+
+        # Adjust layout to prevent label cutoff
+        fig.tight_layout()
+
+        return fig
+
+    except Exception as e:
+        raise PlotGenerationError(f"Failed to create strategy chart: {e}") from e
