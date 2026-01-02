@@ -553,6 +553,48 @@ class TestAddPositionEndpoint:
         assert data["positions"][0]["conid"] == 123456
         assert data["positions"][1]["conid"] == 123457
 
+    def test_add_duplicate_position(self, test_client, mock_ibkr_client):
+        """Test that adding the same conid twice returns 400."""
+        session_id = self._create_session_with_strategy(test_client, mock_ibkr_client)
+
+        # Mock option chain
+        mock_call = OptionContract(
+            conid=123456,
+            strike=150.0,
+            right="C",
+            expiration=date(2026, 1, 16),
+            bid=2.50,
+            ask=2.55,
+            multiplier=100,
+        )
+        mock_chain = OptionChain(
+            expiration=date(2026, 1, 16),
+            calls=[mock_call],
+            puts=[],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain)
+
+        # Add first position
+        response1 = test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 2},
+            cookies={"session_id": session_id}
+        )
+        assert response1.status_code == 200
+        assert len(response1.json()["positions"]) == 1
+
+        # Try to add the same position again
+        response2 = test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 3},
+            cookies={"session_id": session_id}
+        )
+        assert response2.status_code == 400
+        data = response2.json()
+        assert "DUPLICATE_POSITION" in data["code"]
+        assert "already exists" in data["error"]
+        assert "PATCH" in data["error"]
+
 
 class TestModifyPositionEndpoint:
     """Test PATCH /api/strategy/positions/{conid} endpoint."""

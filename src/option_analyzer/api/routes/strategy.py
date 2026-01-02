@@ -282,7 +282,7 @@ async def add_position(
             code="CONTRACT_NOT_FOUND",
         )
 
-    # Check for mixed expirations
+    # Check for mixed expirations and duplicates
     positions = strategy.get("positions", [])
     if positions:
         # All positions must have same expiration as the new contract
@@ -292,6 +292,15 @@ async def add_position(
                     f"Cannot add contract with expiration {contract.expiration}. "
                     f"Strategy already has positions with expiration {pos['expiration']}"
                 )
+
+    # Check for duplicate conid
+    for pos in positions:
+        if pos["conid"] == request.conid:
+            raise ValidationError(
+                f"Position with conid {request.conid} already exists in strategy. "
+                f"Use PATCH /api/strategy/positions/{request.conid} to modify the existing position.",
+                code="DUPLICATE_POSITION",
+            )
 
     # Add position to strategy
     position_data = {
