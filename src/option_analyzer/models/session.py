@@ -5,7 +5,7 @@ Sessions store strategy configurations and historical data for
 stateful multi-step analysis workflows.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -24,10 +24,10 @@ class SessionState(BaseModel):
 
     session_id: str = Field(description="Unique session identifier")
     created_at: datetime = Field(
-        default_factory=datetime.utcnow, description="Session creation timestamp"
+        default_factory=lambda: datetime.now(UTC), description="Session creation timestamp"
     )
     last_accessed: datetime = Field(
-        default_factory=datetime.utcnow, description="Last access timestamp"
+        default_factory=lambda: datetime.now(UTC), description="Last access timestamp"
     )
     data: dict[str, Any] = Field(
         default_factory=dict, description="Session data storage"
@@ -43,9 +43,9 @@ class SessionState(BaseModel):
         Returns:
             True if session is expired, False otherwise
         """
-        age_seconds = (datetime.utcnow() - self.last_accessed).total_seconds()
+        age_seconds = (datetime.now(UTC) - self.last_accessed).total_seconds()
         return age_seconds > ttl_seconds
 
     def touch(self) -> None:
         """Update last_accessed timestamp to current time."""
-        self.last_accessed = datetime.utcnow()
+        self.last_accessed = datetime.now(UTC)

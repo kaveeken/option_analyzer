@@ -5,7 +5,7 @@ Handles session lifecycle: creation, retrieval, expiration, and cleanup.
 """
 
 import secrets
-from datetime import datetime
+from datetime import UTC, datetime
 
 from ..config import Settings
 from ..models.session import SessionState
@@ -95,7 +95,7 @@ class SessionService:
         Note:
             Should be called periodically by background task.
         """
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         expired_ids = [
             session_id
             for session_id, session in self._sessions.items()

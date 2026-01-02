@@ -11,7 +11,7 @@ Tests cover:
 """
 
 import time
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -246,7 +246,7 @@ class TestSessionState:
         assert not session.is_expired(3600)
 
         # Simulate old last_accessed by modifying it
-        session.last_accessed = datetime.utcnow() - timedelta(seconds=7200)
+        session.last_accessed = datetime.now(UTC) - timedelta(seconds=7200)
 
         # Should be expired with 3600 second TTL
         assert session.is_expired(3600)
@@ -256,13 +256,13 @@ class TestSessionState:
         session = SessionState(session_id="test-123")
 
         # Set last_accessed to just under TTL seconds ago
-        session.last_accessed = datetime.utcnow() - timedelta(seconds=3599)
+        session.last_accessed = datetime.now(UTC) - timedelta(seconds=3599)
 
         # Should not be expired
         assert not session.is_expired(3600)
 
         # But significantly past TTL should be expired
-        session.last_accessed = datetime.utcnow() - timedelta(seconds=3700)
+        session.last_accessed = datetime.now(UTC) - timedelta(seconds=3700)
         assert session.is_expired(3600)
 
     def test_session_state_data_storage(self) -> None:
