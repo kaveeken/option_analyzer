@@ -979,6 +979,161 @@ class TestGetStrategySummaryEndpoint:
         assert data["positions"][1]["conid"] == 123457
 
 
+class TestUpdateTargetDateEndpoint:
+    """Test PATCH /api/strategy/target-date endpoint."""
+
+    def test_update_target_date_success(self, test_client, mock_ibkr_client):
+        """Test successfully updating target date with no positions."""
+        # Initialize strategy
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.0,
+            conid=265598,
+            available_expirations=["JAN26", "FEB26", "MAR26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+        response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        session_id = response.cookies.get("session_id")
+        assert response.json()["target_date"] == "JAN26"
+
+        # Update target date
+        response = test_client.patch(
+            "/api/strategy/target-date",
+            json={"target_date": "FEB26"},
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["symbol"] == "AAPL"
+        assert data["target_date"] == "FEB26"
+        assert data["available_expirations"] == ["JAN26", "FEB26", "MAR26"]
+        assert data["session_id"] == session_id
+
+    def test_update_target_date_no_session(self, test_client):
+        """Test that updating target date without session returns 401."""
+        response = test_client.patch(
+            "/api/strategy/target-date",
+            json={"target_date": "FEB26"}
+        )
+
+        assert response.status_code == 401
+        data = response.json()
+        assert "error" in data
+
+    def test_update_target_date_no_strategy(self, test_client, session_service):
+        """Test that updating without initialized strategy returns 400."""
+        session = session_service.create_session()
+
+        response = test_client.patch(
+            "/api/strategy/target-date",
+            json={"target_date": "FEB26"},
+            cookies={"session_id": session.session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "No strategy initialized" in data["error"]
+
+    def test_update_target_date_invalid_date(self, test_client, mock_ibkr_client):
+        """Test that invalid target date returns 400."""
+        # Initialize strategy
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.0,
+            conid=265598,
+            available_expirations=["JAN26", "FEB26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+        response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        session_id = response.cookies.get("session_id")
+
+        # Try to update to invalid date
+        response = test_client.patch(
+            "/api/strategy/target-date",
+            json={"target_date": "DEC26"},
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "INVALID_TARGET_DATE" in data["code"]
+        assert "DEC26" in data["error"]
+
+    def test_update_target_date_with_positions(self, test_client, mock_ibkr_client):
+        """Test that updating target date is rejected when positions exist."""
+        # Initialize strategy
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.0,
+            conid=265598,
+            available_expirations=["JAN26", "FEB26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+        response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        session_id = response.cookies.get("session_id")
+
+        # Add a position
+        mock_call = OptionContract(
+            conid=123456,
+            strike=150.0,
+            right="C",
+            expiration=date(2026, 1, 16),
+            bid=2.50,
+            ask=2.55,
+            multiplier=100,
+        )
+        mock_chain = OptionChain(
+            expiration=date(2026, 1, 16),
+            calls=[mock_call],
+            puts=[],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain)
+        test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 2},
+            cookies={"session_id": session_id}
+        )
+
+        # Try to update target date
+        response = test_client.patch(
+            "/api/strategy/target-date",
+            json={"target_date": "FEB26"},
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "POSITIONS_EXIST" in data["code"]
+        assert "Cannot change target date" in data["error"]
+        assert "delete" in data["error"].lower()
+
+    def test_update_target_date_same_date(self, test_client, mock_ibkr_client):
+        """Test updating to the same target date (should succeed as no-op)."""
+        # Initialize strategy
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.0,
+            conid=265598,
+            available_expirations=["JAN26", "FEB26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+        response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        session_id = response.cookies.get("session_id")
+        assert response.json()["target_date"] == "JAN26"
+
+        # Update to same date
+        response = test_client.patch(
+            "/api/strategy/target-date",
+            json={"target_date": "JAN26"},
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["target_date"] == "JAN26"
+
+
 class TestAnalyzeStrategyEndpoint:
     """Test POST /api/strategy/analyze endpoint."""
 

@@ -27,6 +27,7 @@ from ..schemas import (
     StrategyInitRequest,
     StrategyInitResponse,
     StrategySummaryResponse,
+    UpdateTargetDateRequest,
 )
 
 router = APIRouter(prefix="/api/strategy", tags=["strategy"])
@@ -155,6 +156,75 @@ async def get_strategy_summary(
         target_date=strategy_data["target_date"],
         available_expirations=strategy_data.get("available_expirations", []),
         positions=positions,
+    )
+
+
+@router.patch("/target-date", response_model=StrategyInitResponse)
+async def update_target_date(
+    request: UpdateTargetDateRequest,
+    session: Annotated[SessionState, Depends(get_current_session)],
+) -> StrategyInitResponse:
+    """
+    Update the target expiration date for the strategy.
+
+    Changes the target expiration date to a different available expiration.
+    Requires that no positions exist in the strategy (positions must be
+    cleared before changing target date).
+
+    Args:
+        request: New target date (must be in available_expirations)
+        session: Current session with strategy data
+
+    Returns:
+        Updated strategy information (similar to init response)
+
+    Raises:
+        401: No valid session
+        400: No strategy initialized, invalid target date, or positions exist
+
+    Example:
+        PATCH /api/strategy/target-date
+        Body: {"target_date": "FEB26"}
+        Response: {
+            "symbol": "AAPL",
+            "current_price": 150.25,
+            "target_date": "FEB26",
+            "available_expirations": ["JAN26", "FEB26", "MAR26"],
+            "session_id": "abc123..."
+        }
+    """
+    # Get strategy from session
+    strategy_data = session.data.get("strategy")
+    if not strategy_data:
+        raise ValidationError("No strategy initialized. Call /api/strategy/init first.")
+
+    # Validate target_date is in available_expirations
+    available_expirations = strategy_data.get("available_expirations", [])
+    if request.target_date not in available_expirations:
+        raise ValidationError(
+            f"Invalid target_date '{request.target_date}'. "
+            f"Must be one of: {', '.join(available_expirations)}",
+            code="INVALID_TARGET_DATE",
+        )
+
+    # Check if positions exist - reject if they do
+    positions = strategy_data.get("positions", [])
+    if positions:
+        raise ValidationError(
+            f"Cannot change target date when positions exist. "
+            f"Please delete all {len(positions)} position(s) first.",
+            code="POSITIONS_EXIST",
+        )
+
+    # Update target_date in session
+    strategy_data["target_date"] = request.target_date
+
+    return StrategyInitResponse(
+        symbol=strategy_data["symbol"],
+        current_price=strategy_data["current_price"],
+        target_date=request.target_date,
+        available_expirations=available_expirations,
+        session_id=session.session_id,
     )
 
 

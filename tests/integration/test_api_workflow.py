@@ -263,6 +263,81 @@ class TestFullStrategyWorkflow:
         assert summary["positions"][1]["conid"] == 123457
         assert summary["positions"][1]["quantity"] == -1
 
+    def test_update_target_date_workflow(self, test_client, mock_ibkr_client):
+        """Test workflow with updating target date."""
+        # Step 1: Initialize strategy with multiple available expirations
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.25,
+            conid=265598,
+            available_expirations=["JAN26", "FEB26", "MAR26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+
+        init_response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        assert init_response.status_code == 200
+        session_id = init_response.json()["session_id"]
+        assert init_response.json()["target_date"] == "JAN26"
+        cookies = {"session_id": session_id}
+
+        # Step 2: Update target date to FEB26 (no positions yet)
+        update_response = test_client.patch(
+            "/api/strategy/target-date",
+            json={"target_date": "FEB26"},
+            cookies=cookies,
+        )
+        assert update_response.status_code == 200
+        assert update_response.json()["target_date"] == "FEB26"
+
+        # Step 3: Add a position for FEB26
+        mock_call = OptionContract(
+            conid=123456,
+            strike=150.0,
+            right="C",
+            expiration=date(2026, 2, 20),  # FEB26
+            bid=2.50,
+            ask=2.55,
+            multiplier=100,
+        )
+        mock_chain = OptionChain(
+            expiration=date(2026, 2, 20),
+            calls=[mock_call],
+            puts=[],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain)
+
+        add_response = test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 2},
+            cookies=cookies,
+        )
+        assert add_response.status_code == 200
+
+        # Step 4: Try to update target date (should fail - positions exist)
+        update_response2 = test_client.patch(
+            "/api/strategy/target-date",
+            json={"target_date": "MAR26"},
+            cookies=cookies,
+        )
+        assert update_response2.status_code == 400
+        assert "POSITIONS_EXIST" in update_response2.json()["code"]
+
+        # Step 5: Delete position
+        delete_response = test_client.delete(
+            "/api/strategy/positions/123456",
+            cookies=cookies,
+        )
+        assert delete_response.status_code == 200
+
+        # Step 6: Now update target date should work
+        update_response3 = test_client.patch(
+            "/api/strategy/target-date",
+            json={"target_date": "MAR26"},
+            cookies=cookies,
+        )
+        assert update_response3.status_code == 200
+        assert update_response3.json()["target_date"] == "MAR26"
+
 
 class TestSessionPersistence:
     """Test session persistence across requests."""

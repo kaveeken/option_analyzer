@@ -269,3 +269,18 @@ class StrategySummaryResponse(BaseModel):
     positions: list[PositionResponse] = Field(
         description="List of option positions", default_factory=list
     )
+
+
+class UpdateTargetDateRequest(BaseModel):
+    """
+    Request to update the target expiration date.
+
+    Attributes:
+        target_date: New target expiration date (must be in available_expirations)
+    """
+
+    target_date: str = Field(
+        description="New target expiration date",
+        examples=["FEB26"],
+        min_length=1,
+    )
