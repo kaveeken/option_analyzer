@@ -158,12 +158,19 @@ def create_strategy_chart(bins: list, strategy) -> matplotlib.figure.Figure:
         # Create secondary axis for P&L curve
         ax2 = ax1.twinx()
 
-        # Calculate P&L at each midpoint
-        pnl_values = [strategy.total_payoff(price) for price in midpoints]
+        # Generate high-resolution price points for smooth P&L curve
+        # Use many more points than histogram bins for accuracy
+        price_min = bins[0].lower
+        price_max = bins[-1].upper
+        price_step = (price_max - price_min) / 500  # 500 points for smooth curve
+        smooth_prices = [price_min + i * price_step for i in range(501)]
+
+        # Calculate P&L at each high-resolution price point
+        pnl_values = [strategy.total_payoff(price) for price in smooth_prices]
 
         # Plot P&L curve on secondary axis
         ax2.plot(
-            midpoints,
+            smooth_prices,
             pnl_values,
             color='darkred',
             linewidth=2.5,
