@@ -280,3 +280,517 @@ class TestHealthCheckEndpoint:
         data = response.json()
         assert data["status"] == "healthy"
         assert data["version"] == "0.1.0"
+
+
+class TestAddPositionEndpoint:
+    """Test POST /api/strategy/positions endpoint."""
+
+    def _create_session_with_strategy(self, test_client, mock_ibkr_client):
+        """Helper to create a session with initialized strategy."""
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.25,
+            conid=265598,
+            available_expirations=["JAN26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+
+        response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        assert response.status_code == 200
+        return response.cookies.get("session_id")
+
+    def test_add_position_success(self, test_client, mock_ibkr_client):
+        """Test successfully adding a position to the strategy."""
+        # Create session with strategy
+        session_id = self._create_session_with_strategy(test_client, mock_ibkr_client)
+
+        # Mock option chain response
+        mock_call = OptionContract(
+            conid=123456,
+            strike=150.0,
+            right="C",
+            expiration=date(2026, 1, 16),
+            bid=2.50,
+            ask=2.55,
+            multiplier=100,
+        )
+        mock_chain = OptionChain(
+            expiration=date(2026, 1, 16),
+            calls=[mock_call],
+            puts=[],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain)
+
+        # Add position
+        response = test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 2},
+            cookies={"session_id": session_id}
+        )
+
+        # Verify response
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["positions"]) == 1
+        position = data["positions"][0]
+        assert position["conid"] == 123456
+        assert position["strike"] == 150.0
+        assert position["right"] == "C"
+        assert position["expiration"] == "2026-01-16"
+        assert position["quantity"] == 2
+        assert position["bid"] == 2.50
+        assert position["ask"] == 2.55
+
+    def test_add_position_negative_quantity(self, test_client, mock_ibkr_client):
+        """Test adding a short position (negative quantity)."""
+        session_id = self._create_session_with_strategy(test_client, mock_ibkr_client)
+
+        mock_put = OptionContract(
+            conid=123457,
+            strike=145.0,
+            right="P",
+            expiration=date(2026, 1, 16),
+            bid=1.80,
+            ask=1.85,
+            multiplier=100,
+        )
+        mock_chain = OptionChain(
+            expiration=date(2026, 1, 16),
+            calls=[],
+            puts=[mock_put],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain)
+
+        response = test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123457, "quantity": -1},
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["positions"][0]["quantity"] == -1
+
+    def test_add_position_zero_quantity(self, test_client, mock_ibkr_client):
+        """Test that adding a position with zero quantity returns 400."""
+        session_id = self._create_session_with_strategy(test_client, mock_ibkr_client)
+
+        response = test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 0},
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "error" in data
+        assert "INVALID_QUANTITY" in data["code"]
+
+    def test_add_position_no_session(self, test_client):
+        """Test that adding a position without a session returns 401."""
+        response = test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 2}
+        )
+
+        assert response.status_code == 401
+        data = response.json()
+        assert "error" in data
+
+    def test_add_position_no_strategy_initialized(self, test_client, session_service):
+        """Test that adding a position without initializing strategy returns 400."""
+        # Create a session but don't initialize strategy
+        session = session_service.create_session()
+
+        response = test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 2},
+            cookies={"session_id": session.session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "No strategy initialized" in data["error"]
+
+    def test_add_position_contract_not_found(self, test_client, mock_ibkr_client):
+        """Test that adding a non-existent contract returns 400."""
+        session_id = self._create_session_with_strategy(test_client, mock_ibkr_client)
+
+        # Mock option chain with different contracts
+        mock_call = OptionContract(
+            conid=999999,
+            strike=150.0,
+            right="C",
+            expiration=date(2026, 1, 16),
+            bid=2.50,
+            ask=2.55,
+            multiplier=100,
+        )
+        mock_chain = OptionChain(
+            expiration=date(2026, 1, 16),
+            calls=[mock_call],
+            puts=[],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain)
+
+        # Try to add a contract that doesn't exist
+        response = test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 2},
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "CONTRACT_NOT_FOUND" in data["code"]
+        assert "not found in option chain" in data["error"]
+
+    def test_add_position_mixed_expiration(self, test_client, mock_ibkr_client):
+        """Test that adding positions with mixed expirations returns 400."""
+        session_id = self._create_session_with_strategy(test_client, mock_ibkr_client)
+
+        # Add first position with JAN26 expiration
+        mock_call1 = OptionContract(
+            conid=123456,
+            strike=150.0,
+            right="C",
+            expiration=date(2026, 1, 16),
+            bid=2.50,
+            ask=2.55,
+            multiplier=100,
+        )
+        mock_chain1 = OptionChain(
+            expiration=date(2026, 1, 16),
+            calls=[mock_call1],
+            puts=[],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain1)
+
+        response = test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 2},
+            cookies={"session_id": session_id}
+        )
+        assert response.status_code == 200
+
+        # Try to add second position with FEB26 expiration
+        mock_call2 = OptionContract(
+            conid=123457,
+            strike=150.0,
+            right="C",
+            expiration=date(2026, 2, 20),
+            bid=3.50,
+            ask=3.55,
+            multiplier=100,
+        )
+        mock_chain2 = OptionChain(
+            expiration=date(2026, 1, 16),  # Still JAN26 for target_date
+            calls=[mock_call1, mock_call2],
+            puts=[],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain2)
+
+        response = test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123457, "quantity": 1},
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "MIXED_EXPIRATION" in data["code"]
+
+    def test_add_multiple_positions_same_expiration(self, test_client, mock_ibkr_client):
+        """Test adding multiple positions with the same expiration succeeds."""
+        session_id = self._create_session_with_strategy(test_client, mock_ibkr_client)
+
+        # Mock option chain with multiple contracts
+        mock_call = OptionContract(
+            conid=123456,
+            strike=150.0,
+            right="C",
+            expiration=date(2026, 1, 16),
+            bid=2.50,
+            ask=2.55,
+            multiplier=100,
+        )
+        mock_put = OptionContract(
+            conid=123457,
+            strike=145.0,
+            right="P",
+            expiration=date(2026, 1, 16),
+            bid=1.80,
+            ask=1.85,
+            multiplier=100,
+        )
+        mock_chain = OptionChain(
+            expiration=date(2026, 1, 16),
+            calls=[mock_call],
+            puts=[mock_put],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain)
+
+        # Add first position
+        response1 = test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 2},
+            cookies={"session_id": session_id}
+        )
+        assert response1.status_code == 200
+        assert len(response1.json()["positions"]) == 1
+
+        # Add second position with same expiration
+        response2 = test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123457, "quantity": -1},
+            cookies={"session_id": session_id}
+        )
+        assert response2.status_code == 200
+        data = response2.json()
+        assert len(data["positions"]) == 2
+        assert data["positions"][0]["conid"] == 123456
+        assert data["positions"][1]["conid"] == 123457
+
+
+class TestModifyPositionEndpoint:
+    """Test PATCH /api/strategy/positions/{conid} endpoint."""
+
+    def _create_session_with_position(self, test_client, mock_ibkr_client):
+        """Helper to create a session with a position."""
+        # Initialize strategy
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.25,
+            conid=265598,
+            available_expirations=["JAN26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+        response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        session_id = response.cookies.get("session_id")
+
+        # Add a position
+        mock_call = OptionContract(
+            conid=123456,
+            strike=150.0,
+            right="C",
+            expiration=date(2026, 1, 16),
+            bid=2.50,
+            ask=2.55,
+            multiplier=100,
+        )
+        mock_chain = OptionChain(
+            expiration=date(2026, 1, 16),
+            calls=[mock_call],
+            puts=[],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain)
+        test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 2},
+            cookies={"session_id": session_id}
+        )
+
+        return session_id
+
+    def test_modify_position_success(self, test_client, mock_ibkr_client):
+        """Test successfully modifying a position's quantity."""
+        session_id = self._create_session_with_position(test_client, mock_ibkr_client)
+
+        response = test_client.patch(
+            "/api/strategy/positions/123456",
+            json={"quantity": 5},
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["positions"]) == 1
+        assert data["positions"][0]["conid"] == 123456
+        assert data["positions"][0]["quantity"] == 5
+
+    def test_modify_position_to_negative(self, test_client, mock_ibkr_client):
+        """Test modifying a long position to short (flip direction)."""
+        session_id = self._create_session_with_position(test_client, mock_ibkr_client)
+
+        response = test_client.patch(
+            "/api/strategy/positions/123456",
+            json={"quantity": -3},
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["positions"][0]["quantity"] == -3
+
+    def test_modify_position_zero_quantity(self, test_client, mock_ibkr_client):
+        """Test that modifying to zero quantity returns 400."""
+        session_id = self._create_session_with_position(test_client, mock_ibkr_client)
+
+        response = test_client.patch(
+            "/api/strategy/positions/123456",
+            json={"quantity": 0},
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "INVALID_QUANTITY" in data["code"]
+
+    def test_modify_position_not_found(self, test_client, mock_ibkr_client):
+        """Test that modifying a non-existent position returns 400."""
+        session_id = self._create_session_with_position(test_client, mock_ibkr_client)
+
+        response = test_client.patch(
+            "/api/strategy/positions/999999",
+            json={"quantity": 5},
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "POSITION_NOT_FOUND" in data["code"]
+        assert "not found" in data["error"]
+
+    def test_modify_position_no_session(self, test_client):
+        """Test that modifying without a session returns 401."""
+        response = test_client.patch(
+            "/api/strategy/positions/123456",
+            json={"quantity": 5}
+        )
+
+        assert response.status_code == 401
+
+    def test_modify_position_no_strategy(self, test_client, session_service):
+        """Test that modifying without initialized strategy returns 400."""
+        session = session_service.create_session()
+
+        response = test_client.patch(
+            "/api/strategy/positions/123456",
+            json={"quantity": 5},
+            cookies={"session_id": session.session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "No strategy initialized" in data["error"]
+
+
+class TestDeletePositionEndpoint:
+    """Test DELETE /api/strategy/positions/{conid} endpoint."""
+
+    def _create_session_with_positions(self, test_client, mock_ibkr_client, count=2):
+        """Helper to create a session with multiple positions."""
+        # Initialize strategy
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.25,
+            conid=265598,
+            available_expirations=["JAN26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+        response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        session_id = response.cookies.get("session_id")
+
+        # Add positions
+        contracts = [
+            OptionContract(
+                conid=123456 + i,
+                strike=150.0 + (i * 5),
+                right="C" if i % 2 == 0 else "P",
+                expiration=date(2026, 1, 16),
+                bid=2.50,
+                ask=2.55,
+                multiplier=100,
+            )
+            for i in range(count)
+        ]
+
+        mock_chain = OptionChain(
+            expiration=date(2026, 1, 16),
+            calls=[c for c in contracts if c.right == "C"],
+            puts=[c for c in contracts if c.right == "P"],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain)
+
+        for i in range(count):
+            test_client.post(
+                "/api/strategy/positions",
+                json={"conid": 123456 + i, "quantity": i + 1},
+                cookies={"session_id": session_id}
+            )
+
+        return session_id
+
+    def test_delete_position_success(self, test_client, mock_ibkr_client):
+        """Test successfully deleting a position."""
+        session_id = self._create_session_with_positions(test_client, mock_ibkr_client, count=2)
+
+        response = test_client.delete(
+            "/api/strategy/positions/123456",
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["positions"]) == 1
+        assert data["positions"][0]["conid"] == 123457
+
+    def test_delete_last_position(self, test_client, mock_ibkr_client):
+        """Test deleting the last position returns empty list."""
+        session_id = self._create_session_with_positions(test_client, mock_ibkr_client, count=1)
+
+        response = test_client.delete(
+            "/api/strategy/positions/123456",
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["positions"]) == 0
+
+    def test_delete_position_not_found(self, test_client, mock_ibkr_client):
+        """Test that deleting a non-existent position returns 400."""
+        session_id = self._create_session_with_positions(test_client, mock_ibkr_client, count=1)
+
+        response = test_client.delete(
+            "/api/strategy/positions/999999",
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "POSITION_NOT_FOUND" in data["code"]
+
+    def test_delete_position_no_session(self, test_client):
+        """Test that deleting without a session returns 401."""
+        response = test_client.delete("/api/strategy/positions/123456")
+
+        assert response.status_code == 401
+
+    def test_delete_position_no_strategy(self, test_client, session_service):
+        """Test that deleting without initialized strategy returns 400."""
+        session = session_service.create_session()
+
+        response = test_client.delete(
+            "/api/strategy/positions/123456",
+            cookies={"session_id": session.session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "No strategy initialized" in data["error"]
+
+    def test_delete_middle_position(self, test_client, mock_ibkr_client):
+        """Test deleting a position from the middle of the list."""
+        session_id = self._create_session_with_positions(test_client, mock_ibkr_client, count=3)
+
+        response = test_client.delete(
+            "/api/strategy/positions/123457",
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["positions"]) == 2
+        assert data["positions"][0]["conid"] == 123456
+        assert data["positions"][1]["conid"] == 123458
