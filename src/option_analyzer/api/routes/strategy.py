@@ -26,6 +26,7 @@ from ..schemas import (
     StrategyAnalysisResponse,
     StrategyInitRequest,
     StrategyInitResponse,
+    StrategySummaryResponse,
 )
 
 router = APIRouter(prefix="/api/strategy", tags=["strategy"])
@@ -104,6 +105,56 @@ async def initialize_strategy(
         target_date=target_date,
         available_expirations=stock.available_expirations,
         session_id=session.session_id,
+    )
+
+
+@router.get("", response_model=StrategySummaryResponse)
+async def get_strategy_summary(
+    session: Annotated[SessionState, Depends(get_current_session)],
+) -> StrategySummaryResponse:
+    """
+    Get current strategy summary.
+
+    Returns the current strategy from session without performing analysis.
+    This is a fast read operation that retrieves the stock, target date,
+    and option positions.
+
+    Args:
+        session: Current session with strategy data
+
+    Returns:
+        Strategy summary with stock info and positions
+
+    Raises:
+        401: No valid session
+        400: No strategy initialized
+
+    Example:
+        GET /api/strategy
+        Response: {
+            "symbol": "AAPL",
+            "current_price": 150.25,
+            "target_date": "JAN26",
+            "available_expirations": ["JAN26", "FEB26", "MAR26"],
+            "positions": [
+                {"conid": 123456, "strike": 150.0, "right": "C", ...}
+            ]
+        }
+    """
+    # Get strategy from session
+    strategy_data = session.data.get("strategy")
+    if not strategy_data:
+        raise ValidationError("No strategy initialized. Call /api/strategy/init first.")
+
+    # Convert positions to PositionResponse format
+    positions = [PositionResponse(**pos) for pos in strategy_data.get("positions", [])]
+
+    return StrategySummaryResponse(
+        symbol=strategy_data["symbol"],
+        current_price=strategy_data["current_price"],
+        target_date=strategy_data["target_date"],
+        available_expirations=strategy_data.get("available_expirations", []),
+        positions=positions,
     )
 
 

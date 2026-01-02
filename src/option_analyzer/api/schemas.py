@@ -244,3 +244,28 @@ class StrategyAnalysisResponse(BaseModel):
     max_loss: float | None = Field(
         description="Maximum possible loss (None if unlimited)", examples=[-500.0]
     )
+
+
+class StrategySummaryResponse(BaseModel):
+    """
+    Current strategy summary without analysis.
+
+    Attributes:
+        symbol: Stock ticker symbol
+        current_price: Current stock price
+        target_date: Target expiration date
+        available_expirations: Available option expiration months
+        positions: List of option positions
+    """
+
+    symbol: str = Field(description="Stock ticker symbol", examples=["AAPL"])
+    current_price: float = Field(description="Current stock price", examples=[150.25])
+    target_date: str = Field(
+        description="Target expiration date", examples=["JAN26"]
+    )
+    available_expirations: list[str] = Field(
+        description="Available option expiration months", examples=[["JAN26", "FEB26"]]
+    )
+    positions: list[PositionResponse] = Field(
+        description="List of option positions", default_factory=list
+    )

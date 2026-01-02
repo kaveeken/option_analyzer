@@ -798,6 +798,187 @@ class TestDeletePositionEndpoint:
         assert data["positions"][1]["conid"] == 123458
 
 
+class TestGetStrategySummaryEndpoint:
+    """Test GET /api/strategy endpoint."""
+
+    def _create_session_with_position(self, test_client, mock_ibkr_client):
+        """Helper to create a session with a strategy and position."""
+        # Initialize strategy
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.0,
+            conid=265598,
+            available_expirations=["JAN26", "FEB26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+        response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        session_id = response.cookies.get("session_id")
+
+        # Add a position
+        mock_call = OptionContract(
+            conid=123456,
+            strike=150.0,
+            right="C",
+            expiration=date(2026, 1, 16),
+            bid=2.50,
+            ask=2.55,
+            multiplier=100,
+        )
+        mock_chain = OptionChain(
+            expiration=date(2026, 1, 16),
+            calls=[mock_call],
+            puts=[],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain)
+        test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 2},
+            cookies={"session_id": session_id}
+        )
+
+        return session_id
+
+    def test_get_strategy_summary_success(self, test_client, mock_ibkr_client):
+        """Test successfully retrieving strategy summary."""
+        session_id = self._create_session_with_position(test_client, mock_ibkr_client)
+
+        # Get strategy summary
+        response = test_client.get(
+            "/api/strategy",
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify structure
+        assert data["symbol"] == "AAPL"
+        assert data["current_price"] == 150.0
+        assert data["target_date"] == "JAN26"
+        assert data["available_expirations"] == ["JAN26", "FEB26"]
+        assert len(data["positions"]) == 1
+
+        # Verify position details
+        position = data["positions"][0]
+        assert position["conid"] == 123456
+        assert position["strike"] == 150.0
+        assert position["right"] == "C"
+        assert position["quantity"] == 2
+        assert position["bid"] == 2.50
+        assert position["ask"] == 2.55
+
+    def test_get_strategy_summary_no_positions(self, test_client, mock_ibkr_client):
+        """Test retrieving strategy summary with no positions."""
+        # Initialize strategy but don't add positions
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.0,
+            conid=265598,
+            available_expirations=["JAN26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+        response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        session_id = response.cookies.get("session_id")
+
+        # Get summary
+        response = test_client.get(
+            "/api/strategy",
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["symbol"] == "AAPL"
+        assert len(data["positions"]) == 0
+
+    def test_get_strategy_summary_no_session(self, test_client):
+        """Test that getting summary without a session returns 401."""
+        response = test_client.get("/api/strategy")
+
+        assert response.status_code == 401
+        data = response.json()
+        assert "error" in data
+
+    def test_get_strategy_summary_no_strategy_initialized(self, test_client, session_service):
+        """Test that getting summary without initialized strategy returns 400."""
+        # Create a session but don't initialize strategy
+        session = session_service.create_session()
+
+        response = test_client.get(
+            "/api/strategy",
+            cookies={"session_id": session.session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "No strategy initialized" in data["error"]
+
+    def test_get_strategy_summary_with_multiple_positions(self, test_client, mock_ibkr_client):
+        """Test retrieving strategy with multiple positions."""
+        # Initialize strategy
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.0,
+            conid=265598,
+            available_expirations=["JAN26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+        response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        session_id = response.cookies.get("session_id")
+
+        # Add multiple positions
+        mock_call = OptionContract(
+            conid=123456,
+            strike=150.0,
+            right="C",
+            expiration=date(2026, 1, 16),
+            bid=2.50,
+            ask=2.55,
+            multiplier=100,
+        )
+        mock_put = OptionContract(
+            conid=123457,
+            strike=145.0,
+            right="P",
+            expiration=date(2026, 1, 16),
+            bid=1.80,
+            ask=1.85,
+            multiplier=100,
+        )
+        mock_chain = OptionChain(
+            expiration=date(2026, 1, 16),
+            calls=[mock_call],
+            puts=[mock_put],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain)
+
+        # Add call
+        test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 2},
+            cookies={"session_id": session_id}
+        )
+
+        # Add put
+        test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123457, "quantity": -1},
+            cookies={"session_id": session_id}
+        )
+
+        # Get summary
+        response = test_client.get(
+            "/api/strategy",
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["positions"]) == 2
+        assert data["positions"][0]["conid"] == 123456
+        assert data["positions"][1]["conid"] == 123457
+
+
 class TestAnalyzeStrategyEndpoint:
     """Test POST /api/strategy/analyze endpoint."""
 

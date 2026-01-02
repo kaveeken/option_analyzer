@@ -212,6 +212,57 @@ class TestFullStrategyWorkflow:
         )
         assert add_response2.status_code == 200
 
+    def test_strategy_summary_workflow(self, test_client, mock_ibkr_client):
+        """Test workflow with strategy summary endpoint."""
+        # Step 1: Initialize strategy
+        init_response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        assert init_response.status_code == 200
+        session_id = init_response.json()["session_id"]
+        cookies = {"session_id": session_id}
+
+        # Step 2: Get summary with no positions
+        summary_response = test_client.get("/api/strategy", cookies=cookies)
+        assert summary_response.status_code == 200
+        summary = summary_response.json()
+        assert summary["symbol"] == "AAPL"
+        assert summary["current_price"] == 150.25
+        assert summary["target_date"] == "JAN26"
+        assert len(summary["positions"]) == 0
+
+        # Step 3: Add a position
+        test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 2},
+            cookies=cookies,
+        )
+
+        # Step 4: Get summary with one position
+        summary_response = test_client.get("/api/strategy", cookies=cookies)
+        assert summary_response.status_code == 200
+        summary = summary_response.json()
+        assert len(summary["positions"]) == 1
+        assert summary["positions"][0]["conid"] == 123456
+        assert summary["positions"][0]["quantity"] == 2
+
+        # Step 5: Add another position
+        test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123457, "quantity": -1},
+            cookies=cookies,
+        )
+
+        # Step 6: Get final summary with two positions
+        summary_response = test_client.get("/api/strategy", cookies=cookies)
+        assert summary_response.status_code == 200
+        summary = summary_response.json()
+        assert len(summary["positions"]) == 2
+
+        # Verify positions are in order
+        assert summary["positions"][0]["conid"] == 123456
+        assert summary["positions"][0]["quantity"] == 2
+        assert summary["positions"][1]["conid"] == 123457
+        assert summary["positions"][1]["quantity"] == -1
+
 
 class TestSessionPersistence:
     """Test session persistence across requests."""
