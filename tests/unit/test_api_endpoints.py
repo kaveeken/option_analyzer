@@ -840,6 +840,133 @@ class TestDeletePositionEndpoint:
         assert data["positions"][1]["conid"] == 123458
 
 
+class TestResetStrategyEndpoint:
+    """Test POST /api/strategy/reset endpoint."""
+
+    def _create_session_with_positions(self, test_client, mock_ibkr_client, count=2):
+        """Helper to create a session with multiple positions."""
+        # Initialize strategy
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.25,
+            conid=265598,
+            available_expirations=["JAN26", "FEB26", "MAR26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+        response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        session_id = response.cookies.get("session_id")
+
+        # Add positions
+        contracts = [
+            OptionContract(
+                conid=123456 + i,
+                strike=150.0 + (i * 5),
+                right="C",
+                expiration=date(2026, 1, 16),
+                bid=2.50,
+                ask=2.55,
+                multiplier=100,
+            )
+            for i in range(count)
+        ]
+
+        mock_chain = OptionChain(
+            expiration=date(2026, 1, 16),
+            calls=contracts,
+            puts=[],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain)
+
+        for i in range(count):
+            test_client.post(
+                "/api/strategy/positions",
+                json={"conid": 123456 + i, "quantity": i + 1},
+                cookies={"session_id": session_id}
+            )
+
+        return session_id
+
+    def test_reset_strategy_success(self, test_client, mock_ibkr_client):
+        """Test successfully resetting a strategy with positions."""
+        session_id = self._create_session_with_positions(test_client, mock_ibkr_client, count=3)
+
+        # Verify positions exist before reset
+        response = test_client.get("/api/strategy", cookies={"session_id": session_id})
+        assert len(response.json()["positions"]) == 3
+
+        # Reset strategy
+        response = test_client.post("/api/strategy/reset", cookies={"session_id": session_id})
+
+        # Verify response
+        assert response.status_code == 200
+        data = response.json()
+        assert data["symbol"] == "AAPL"
+        assert data["current_price"] == 150.25
+        assert data["target_date"] == "JAN26"  # Reset to earliest expiration
+        assert data["available_expirations"] == ["JAN26", "FEB26", "MAR26"]
+        assert data["positions"] == []
+
+        # Verify positions were cleared by fetching strategy again
+        response = test_client.get("/api/strategy", cookies={"session_id": session_id})
+        assert response.status_code == 200
+        assert len(response.json()["positions"]) == 0
+
+    def test_reset_strategy_no_positions(self, test_client, mock_ibkr_client):
+        """Test resetting a strategy that has no positions."""
+        # Initialize strategy without positions
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.25,
+            conid=265598,
+            available_expirations=["FEB26", "MAR26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+        response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        session_id = response.cookies.get("session_id")
+
+        # Reset strategy
+        response = test_client.post("/api/strategy/reset", cookies={"session_id": session_id})
+
+        # Verify response
+        assert response.status_code == 200
+        data = response.json()
+        assert data["symbol"] == "AAPL"
+        assert data["target_date"] == "FEB26"
+        assert data["positions"] == []
+
+    def test_reset_strategy_no_session(self, test_client):
+        """Test that resetting without a session returns 401."""
+        response = test_client.post("/api/strategy/reset")
+
+        assert response.status_code == 401
+
+    def test_reset_strategy_no_strategy(self, test_client, session_service):
+        """Test that resetting without initialized strategy returns 400."""
+        session = session_service.create_session()
+
+        response = test_client.post(
+            "/api/strategy/reset",
+            cookies={"session_id": session.session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "No strategy initialized" in data["error"]
+
+    def test_reset_keeps_same_session(self, test_client, mock_ibkr_client):
+        """Test that reset keeps the same session ID."""
+        session_id = self._create_session_with_positions(test_client, mock_ibkr_client, count=2)
+
+        # Reset strategy
+        response = test_client.post("/api/strategy/reset", cookies={"session_id": session_id})
+
+        assert response.status_code == 200
+
+        # Verify same session still works
+        response = test_client.get("/api/strategy", cookies={"session_id": session_id})
+        assert response.status_code == 200
+
+
 class TestGetStrategySummaryEndpoint:
     """Test GET /api/strategy endpoint."""
 

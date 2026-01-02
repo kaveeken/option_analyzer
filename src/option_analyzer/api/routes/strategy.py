@@ -424,6 +424,59 @@ async def delete_position(
     )
 
 
+@router.post("/reset", response_model=StrategySummaryResponse)
+async def reset_strategy(
+    session: Annotated[SessionState, Depends(get_current_session)],
+) -> StrategySummaryResponse:
+    """
+    Reset the current strategy.
+
+    Clears all positions from the strategy and resets the target date
+    to the earliest available expiration. Keeps the same session and
+    stock symbol.
+
+    Args:
+        session: Current session with strategy data
+
+    Returns:
+        Strategy summary with cleared positions
+
+    Raises:
+        401: No valid session
+        400: No strategy initialized
+
+    Example:
+        POST /api/strategy/reset
+        Response: {
+            "symbol": "AAPL",
+            "current_price": 150.25,
+            "target_date": "JAN26",
+            "available_expirations": ["JAN26", "FEB26", "MAR26"],
+            "positions": []
+        }
+    """
+    # Get strategy from session
+    strategy_data = session.data.get("strategy")
+    if not strategy_data:
+        raise ValidationError("No strategy initialized. Call /api/strategy/init first.")
+
+    # Clear all positions
+    strategy_data["positions"] = []
+
+    # Reset target_date to earliest expiration
+    available_expirations = strategy_data.get("available_expirations", [])
+    if available_expirations:
+        strategy_data["target_date"] = available_expirations[0]
+
+    return StrategySummaryResponse(
+        symbol=strategy_data["symbol"],
+        current_price=strategy_data["current_price"],
+        target_date=strategy_data["target_date"],
+        available_expirations=available_expirations,
+        positions=[],
+    )
+
+
 def _reconstruct_strategy_from_session(session: SessionState) -> Strategy:
     """
     Reconstruct a Strategy domain object from session data.
