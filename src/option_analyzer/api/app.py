@@ -11,6 +11,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from ..config import get_settings
 from ..services.session import get_session_service
@@ -139,5 +140,8 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(stocks.router)
     app.include_router(strategy.router)
+
+    # Mount static files for serving generated plots
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
     return app
