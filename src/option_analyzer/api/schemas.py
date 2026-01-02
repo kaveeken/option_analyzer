@@ -227,6 +227,7 @@ class StrategyAnalysisResponse(BaseModel):
         probability_of_profit: Fraction of outcomes with positive P&L (0.0 to 1.0)
         max_gain: Maximum possible profit (None if unlimited upside)
         max_loss: Maximum possible loss (None if unlimited downside)
+        plot_url: URL path to the generated strategy chart
     """
 
     price_distribution: list[PriceBinResponse] = Field(
@@ -243,6 +244,10 @@ class StrategyAnalysisResponse(BaseModel):
     )
     max_loss: float | None = Field(
         description="Maximum possible loss (None if unlimited)", examples=[-500.0]
+    )
+    plot_url: str = Field(
+        description="URL path to the generated chart",
+        examples=["static/plots/abc123_20260103_120530.png"],
     )
 
 

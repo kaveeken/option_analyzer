@@ -4,6 +4,7 @@ Strategy management endpoints.
 Provides endpoints for initializing and managing option trading strategies.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from typing import Annotated
 
@@ -16,7 +17,13 @@ from ...services.risk import calculate_risk_metrics
 from ...services.session import SessionService
 from ...services.statistics import create_histogram, geometric_returns, get_price_distribution
 from ...utils.exceptions import InvalidQuantityError, MixedExpirationError, ValidationError
-from ..dependencies import get_current_session, get_ibkr_client, get_session_service_dep
+from ...utils.plotting import cleanup_plot, create_strategy_chart, run_plot_operation, save_plot
+from ..dependencies import (
+    get_current_session,
+    get_ibkr_client,
+    get_plot_executor_dep,
+    get_session_service_dep,
+)
 from ..schemas import (
     AddPositionRequest,
     ModifyPositionRequest,
@@ -528,6 +535,7 @@ def _reconstruct_strategy_from_session(session: SessionState) -> Strategy:
 async def analyze_strategy(
     session: Annotated[SessionState, Depends(get_current_session)],
     ibkr: Annotated[IBKRClient, Depends(get_ibkr_client)],
+    plot_executor: Annotated[ThreadPoolExecutor, Depends(get_plot_executor_dep)],
 ) -> StrategyAnalysisResponse:
     """
     Analyze strategy using Monte Carlo simulation.
@@ -614,10 +622,24 @@ async def analyze_strategy(
         for bin in bins
     ]
 
+    # Generate strategy chart with price distribution and P&L curve
+    def _create_chart():
+        return create_strategy_chart(bins, strategy)
+
+    fig = await run_plot_operation(plot_executor, _create_chart)
+
+    try:
+        # Save plot to disk with session-based naming
+        plot_url = save_plot(fig, session.session_id)
+    finally:
+        # Always cleanup figure to prevent memory leaks
+        cleanup_plot(fig)
+
     return StrategyAnalysisResponse(
         price_distribution=bin_responses,
         expected_value=risk_metrics.expected_value,
         probability_of_profit=risk_metrics.probability_of_profit,
         max_gain=risk_metrics.max_gain,
         max_loss=risk_metrics.max_loss,
+        plot_url=plot_url,
     )

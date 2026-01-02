@@ -5,6 +5,7 @@ Provides reusable dependencies for routes to access configuration,
 clients, and services.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from typing import Annotated
 
@@ -112,3 +113,22 @@ def get_current_session(
         raise SessionExpiredError("No session ID provided")
 
     return session_service.get_session(session_id)
+
+
+def get_plot_executor_dep() -> ThreadPoolExecutor:
+    """
+    Get the plot thread pool executor.
+
+    Returns:
+        ThreadPoolExecutor for matplotlib operations
+
+    Raises:
+        RuntimeError: If called before application startup
+
+    Note:
+        This executor is initialized on app startup and used for
+        thread-safe matplotlib plot generation.
+    """
+    from .app import get_plot_executor
+
+    return get_plot_executor()

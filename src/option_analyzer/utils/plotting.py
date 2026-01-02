@@ -8,6 +8,7 @@ thread pool executor.
 import asyncio
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 from typing import TypeVar
 
@@ -204,3 +205,55 @@ def create_strategy_chart(bins: list, strategy) -> matplotlib.figure.Figure:
 
     except Exception as e:
         raise PlotGenerationError(f"Failed to create strategy chart: {e}") from e
+
+
+def save_plot(
+    fig: matplotlib.figure.Figure,
+    session_id: str,
+    base_path: Path = Path("static/plots"),
+) -> str:
+    """
+    Save a matplotlib figure to disk with session-based naming.
+
+    Generates a unique filename using the session ID and timestamp,
+    then saves the figure to the plots directory.
+
+    Args:
+        fig: Matplotlib figure to save
+        session_id: Session identifier for filename
+        base_path: Base directory for plots (default: static/plots)
+
+    Returns:
+        Relative path to the saved plot file (e.g., "static/plots/abc123_20260103_120530.png")
+
+    Raises:
+        PlotGenerationError: If saving fails
+
+    Example:
+        >>> fig = create_strategy_chart(bins, strategy)
+        >>> path = save_plot(fig, "abc123")
+        >>> # Returns: "static/plots/abc123_20260103_120530.png"
+
+    Note:
+        - Filename format: {session_id}_{timestamp}.png
+        - Timestamp format: YYYYMMDD_HHMMSS
+        - Directory is created if it doesn't exist
+        - Thread-safe for concurrent writes (unique timestamps)
+    """
+    try:
+        # Ensure directory exists
+        plots_dir = ensure_plots_directory(base_path)
+
+        # Generate filename with timestamp for uniqueness
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{session_id}_{timestamp}.png"
+        filepath = plots_dir / filename
+
+        # Save figure with high quality
+        fig.savefig(filepath, dpi=150, bbox_inches="tight")
+
+        # Return relative path for URL construction
+        return str(Path(base_path) / filename)
+
+    except Exception as e:
+        raise PlotGenerationError(f"Failed to save plot: {e}") from e

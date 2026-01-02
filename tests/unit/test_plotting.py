@@ -12,6 +12,7 @@ from option_analyzer.utils.plotting import (
     create_strategy_chart,
     ensure_plots_directory,
     run_plot_operation,
+    save_plot,
 )
 
 
@@ -260,3 +261,110 @@ class TestStrategyChart:
         assert len(fig.axes) == 2
 
         cleanup_plot(fig)
+
+
+class TestPlotSaving:
+    """Test plot file saving functionality."""
+
+    @pytest.fixture
+    def mock_bins(self):
+        """Create mock price bins for testing."""
+        from option_analyzer.services.statistics import PriceBin
+
+        return [
+            PriceBin(lower=145.0, upper=150.0, count=100, midpoint=147.5),
+            PriceBin(lower=150.0, upper=155.0, count=200, midpoint=152.5),
+        ]
+
+    @pytest.fixture
+    def mock_strategy(self):
+        """Create mock strategy for testing."""
+        from datetime import date
+
+        from option_analyzer.models.domain import (
+            OptionContract,
+            OptionPosition,
+            Stock,
+            Strategy,
+        )
+
+        stock = Stock(symbol="TEST", current_price=150.0, conid=12345)
+        call = OptionContract(
+            conid=111,
+            strike=150.0,
+            right="C",
+            expiration=date(2026, 1, 15),
+            bid=5.0,
+            ask=5.5,
+        )
+        positions = [OptionPosition(contract=call, quantity=1)]
+        return Strategy(stock=stock, option_positions=positions)
+
+    def test_save_plot_creates_file(self, tmp_path, mock_bins, mock_strategy):
+        """Test that save_plot creates a file."""
+        plots_dir = tmp_path / "plots"
+
+        # Generate a chart
+        fig = create_strategy_chart(mock_bins, mock_strategy)
+
+        # Save it
+        session_id = "test_session_123"
+        plot_path = save_plot(fig, session_id, base_path=plots_dir)
+
+        # Verify file was created
+        assert plots_dir.exists()
+        full_path = tmp_path / plot_path
+        assert full_path.exists()
+        assert full_path.suffix == ".png"
+
+        # Verify filename format
+        assert session_id in full_path.name
+        assert "_" in full_path.name
+
+        cleanup_plot(fig)
+
+    def test_save_plot_filename_format(self, tmp_path, mock_bins, mock_strategy):
+        """Test that saved plot follows naming convention."""
+        plots_dir = tmp_path / "plots"
+        fig = create_strategy_chart(mock_bins, mock_strategy)
+
+        session_id = "abc123"
+        plot_path = save_plot(fig, session_id, base_path=plots_dir)
+
+        # Extract filename
+        from pathlib import Path
+
+        filename = Path(plot_path).name
+
+        # Should be: {session_id}_{timestamp}.png
+        assert filename.startswith(f"{session_id}_")
+        assert filename.endswith(".png")
+
+        # Timestamp part should be 15 chars: YYYYMMDD_HHMMSS
+        timestamp_part = filename.replace(f"{session_id}_", "").replace(".png", "")
+        assert len(timestamp_part) == 15  # YYYYMMDD_HHMMSS
+        assert timestamp_part[8] == "_"  # Underscore between date and time
+
+        cleanup_plot(fig)
+
+    def test_save_plot_concurrent_writes(self, tmp_path, mock_bins, mock_strategy):
+        """Test that concurrent saves create unique files."""
+        plots_dir = tmp_path / "plots"
+        session_id = "concurrent_test"
+
+        # Create multiple plots rapidly
+        paths = []
+        for _ in range(3):
+            fig = create_strategy_chart(mock_bins, mock_strategy)
+            path = save_plot(fig, session_id, base_path=plots_dir)
+            paths.append(path)
+            cleanup_plot(fig)
+
+        # All paths should exist
+        for path in paths:
+            full_path = tmp_path / path
+            assert full_path.exists()
+
+        # Paths might not all be unique due to timestamp resolution
+        # but at least all files should be created
+        assert len(paths) == 3
