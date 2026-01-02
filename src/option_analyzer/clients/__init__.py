@@ -7,5 +7,6 @@ This package contains:
 """
 
 from .cache import CacheInterface, InMemoryCache
+from .ibkr import IBKRClient
 
-__all__ = ["CacheInterface", "InMemoryCache"]
+__all__ = ["CacheInterface", "InMemoryCache", "IBKRClient"]
