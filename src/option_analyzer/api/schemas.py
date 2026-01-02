@@ -198,3 +198,49 @@ class PositionsResponse(BaseModel):
     """
 
     positions: list[PositionResponse] = Field(description="List of option positions")
+
+
+class PriceBinResponse(BaseModel):
+    """
+    A histogram bin representing a price range and frequency.
+
+    Attributes:
+        lower: Lower bound of the price range
+        upper: Upper bound of the price range
+        count: Number of simulated outcomes in this range
+        midpoint: Midpoint of the price range
+    """
+
+    lower: float = Field(description="Lower bound of price range", examples=[145.0])
+    upper: float = Field(description="Upper bound of price range", examples=[150.0])
+    count: int = Field(description="Number of outcomes in this bin", examples=[127])
+    midpoint: float = Field(description="Midpoint of the bin", examples=[147.5])
+
+
+class StrategyAnalysisResponse(BaseModel):
+    """
+    Strategy analysis results including Monte Carlo simulation.
+
+    Attributes:
+        price_distribution: Histogram bins of simulated price outcomes
+        expected_value: Probability-weighted average P&L in dollars
+        probability_of_profit: Fraction of outcomes with positive P&L (0.0 to 1.0)
+        max_gain: Maximum possible profit (None if unlimited upside)
+        max_loss: Maximum possible loss (None if unlimited downside)
+    """
+
+    price_distribution: list[PriceBinResponse] = Field(
+        description="Histogram of simulated price outcomes"
+    )
+    expected_value: float = Field(
+        description="Probability-weighted average P&L", examples=[250.50]
+    )
+    probability_of_profit: float = Field(
+        description="Fraction of profitable outcomes", ge=0.0, le=1.0, examples=[0.68]
+    )
+    max_gain: float | None = Field(
+        description="Maximum possible profit (None if unlimited)", examples=[1000.0]
+    )
+    max_loss: float | None = Field(
+        description="Maximum possible loss (None if unlimited)", examples=[-500.0]
+    )

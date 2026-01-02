@@ -14,6 +14,8 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from fastapi.testclient import TestClient
 
+import numpy as np
+
 from option_analyzer.api.app import create_app
 from option_analyzer.api.dependencies import get_ibkr_client, get_session_service_dep
 from option_analyzer.clients.ibkr import IBKRClient
@@ -794,3 +796,257 @@ class TestDeletePositionEndpoint:
         assert len(data["positions"]) == 2
         assert data["positions"][0]["conid"] == 123456
         assert data["positions"][1]["conid"] == 123458
+
+
+class TestAnalyzeStrategyEndpoint:
+    """Test POST /api/strategy/analyze endpoint."""
+
+    def _create_session_with_position(self, test_client, mock_ibkr_client):
+        """Helper to create a session with a strategy and position."""
+        # Initialize strategy
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.0,
+            conid=265598,
+            available_expirations=["JAN26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+        response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        session_id = response.cookies.get("session_id")
+
+        # Add a position
+        mock_call = OptionContract(
+            conid=123456,
+            strike=150.0,
+            right="C",
+            expiration=date(2026, 1, 16),
+            bid=2.50,
+            ask=2.55,
+            multiplier=100,
+        )
+        mock_chain = OptionChain(
+            expiration=date(2026, 1, 16),
+            calls=[mock_call],
+            puts=[],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain)
+        test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 2},
+            cookies={"session_id": session_id}
+        )
+
+        return session_id
+
+    def test_analyze_strategy_success(self, test_client, mock_ibkr_client):
+        """Test successful strategy analysis with Monte Carlo simulation."""
+        session_id = self._create_session_with_position(test_client, mock_ibkr_client)
+
+        # Mock historical data response
+        # Create synthetic price data that trends upward
+        closes = np.array([100.0 + i * 0.5 for i in range(260)])  # ~1 year of daily data
+        mock_ibkr_client.get_historical_data = AsyncMock(
+            return_value={"closes": closes}
+        )
+
+        # Make analysis request
+        response = test_client.post(
+            "/api/strategy/analyze",
+            cookies={"session_id": session_id}
+        )
+
+        # Verify response
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify structure
+        assert "price_distribution" in data
+        assert "expected_value" in data
+        assert "probability_of_profit" in data
+        assert "max_gain" in data
+        assert "max_loss" in data
+
+        # Verify price distribution
+        bins = data["price_distribution"]
+        assert len(bins) > 0
+        assert all("lower" in b for b in bins)
+        assert all("upper" in b for b in bins)
+        assert all("count" in b for b in bins)
+        assert all("midpoint" in b for b in bins)
+
+        # Verify total count equals bootstrap samples (10k)
+        total_count = sum(b["count"] for b in bins)
+        assert total_count == 10000
+
+        # Verify probability_of_profit is between 0 and 1
+        assert 0.0 <= data["probability_of_profit"] <= 1.0
+
+        # Verify expected_value is a number
+        assert isinstance(data["expected_value"], (int, float))
+
+    def test_analyze_strategy_no_session(self, test_client):
+        """Test that analyzing without a session returns 401."""
+        response = test_client.post("/api/strategy/analyze")
+
+        assert response.status_code == 401
+        data = response.json()
+        assert "error" in data
+
+    def test_analyze_strategy_no_strategy_initialized(self, test_client, session_service):
+        """Test that analyzing without initialized strategy returns 400."""
+        # Create a session but don't initialize strategy
+        session = session_service.create_session()
+
+        response = test_client.post(
+            "/api/strategy/analyze",
+            cookies={"session_id": session.session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "No strategy initialized" in data["error"]
+
+    def test_analyze_strategy_no_positions(self, test_client, mock_ibkr_client):
+        """Test that analyzing a strategy with no positions returns 400."""
+        # Initialize strategy but don't add positions
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.0,
+            conid=265598,
+            available_expirations=["JAN26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+        response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        session_id = response.cookies.get("session_id")
+
+        # Try to analyze without positions
+        response = test_client.post(
+            "/api/strategy/analyze",
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "no option positions" in data["error"].lower()
+
+    def test_analyze_strategy_missing_bid_ask(self, test_client, mock_ibkr_client, session_service):
+        """Test that analyzing with missing bid/ask prices returns 400."""
+        # Create session with strategy
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.0,
+            conid=265598,
+            available_expirations=["JAN26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+        response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        session_id = response.cookies.get("session_id")
+
+        # Add position with missing bid/ask
+        mock_call = OptionContract(
+            conid=123456,
+            strike=150.0,
+            right="C",
+            expiration=date(2026, 1, 16),
+            bid=None,  # Missing bid
+            ask=None,  # Missing ask
+            multiplier=100,
+        )
+        mock_chain = OptionChain(
+            expiration=date(2026, 1, 16),
+            calls=[mock_call],
+            puts=[],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain)
+        test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 2},
+            cookies={"session_id": session_id}
+        )
+
+        # Try to analyze
+        response = test_client.post(
+            "/api/strategy/analyze",
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert "MISSING_BID_ASK" in data["code"]
+
+    def test_analyze_strategy_with_put_spread(self, test_client, mock_ibkr_client):
+        """Test analyzing a put spread strategy (long put + short put)."""
+        # Initialize strategy
+        mock_stock = Stock(
+            symbol="AAPL",
+            current_price=150.0,
+            conid=265598,
+            available_expirations=["JAN26"],
+        )
+        mock_ibkr_client.get_stock = AsyncMock(return_value=mock_stock)
+        response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        session_id = response.cookies.get("session_id")
+
+        # Add put spread positions
+        long_put = OptionContract(
+            conid=123456,
+            strike=150.0,
+            right="P",
+            expiration=date(2026, 1, 16),
+            bid=4.50,
+            ask=4.55,
+            multiplier=100,
+        )
+        short_put = OptionContract(
+            conid=123457,
+            strike=145.0,
+            right="P",
+            expiration=date(2026, 1, 16),
+            bid=2.50,
+            ask=2.55,
+            multiplier=100,
+        )
+        mock_chain = OptionChain(
+            expiration=date(2026, 1, 16),
+            calls=[],
+            puts=[long_put, short_put],
+        )
+        mock_ibkr_client.get_option_chain = AsyncMock(return_value=mock_chain)
+
+        # Add long put
+        test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 1},
+            cookies={"session_id": session_id}
+        )
+
+        # Add short put
+        test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123457, "quantity": -1},
+            cookies={"session_id": session_id}
+        )
+
+        # Mock historical data
+        closes = np.array([100.0 + i * 0.5 for i in range(260)])
+        mock_ibkr_client.get_historical_data = AsyncMock(
+            return_value={"closes": closes}
+        )
+
+        # Analyze the spread
+        response = test_client.post(
+            "/api/strategy/analyze",
+            cookies={"session_id": session_id}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify analysis results
+        assert data["max_gain"] is not None
+        assert data["max_loss"] is not None
+        assert 0.0 <= data["probability_of_profit"] <= 1.0
+
+        # For a bear put spread, max gain and max loss should be defined
+        assert isinstance(data["max_gain"], (int, float))
+        assert isinstance(data["max_loss"], (int, float))

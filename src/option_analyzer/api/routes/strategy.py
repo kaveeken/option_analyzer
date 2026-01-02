@@ -4,13 +4,17 @@ Strategy management endpoints.
 Provides endpoints for initializing and managing option trading strategies.
 """
 
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response
 
 from ...clients.ibkr import IBKRClient
+from ...models.domain import OptionContract, OptionPosition, Stock, Strategy
 from ...models.session import SessionState
+from ...services.risk import calculate_risk_metrics
 from ...services.session import SessionService
+from ...services.statistics import create_histogram, geometric_returns, get_price_distribution
 from ...utils.exceptions import InvalidQuantityError, MixedExpirationError, ValidationError
 from ..dependencies import get_current_session, get_ibkr_client, get_session_service_dep
 from ..schemas import (
@@ -18,6 +22,8 @@ from ..schemas import (
     ModifyPositionRequest,
     PositionResponse,
     PositionsResponse,
+    PriceBinResponse,
+    StrategyAnalysisResponse,
     StrategyInitRequest,
     StrategyInitResponse,
 )
@@ -285,4 +291,150 @@ async def delete_position(
     # Return remaining positions
     return PositionsResponse(
         positions=[PositionResponse(**pos) for pos in positions]
+    )
+
+
+def _reconstruct_strategy_from_session(session: SessionState) -> Strategy:
+    """
+    Reconstruct a Strategy domain object from session data.
+
+    Args:
+        session: Current session state containing strategy data
+
+    Returns:
+        Strategy object with Stock and OptionPositions
+
+    Raises:
+        ValidationError: If strategy data is missing or incomplete
+    """
+    strategy_data = session.data.get("strategy")
+    if not strategy_data:
+        raise ValidationError("No strategy initialized. Call /api/strategy/init first.")
+
+    # Reconstruct Stock object
+    stock = Stock(
+        symbol=strategy_data["symbol"],
+        current_price=strategy_data["current_price"],
+        conid=strategy_data["stock_conid"],
+        available_expirations=strategy_data.get("available_expirations", []),
+    )
+
+    # Reconstruct OptionPosition objects from positions data
+    option_positions = []
+    for pos_data in strategy_data.get("positions", []):
+        contract = OptionContract(
+            conid=pos_data["conid"],
+            strike=pos_data["strike"],
+            right=pos_data["right"],
+            expiration=date.fromisoformat(pos_data["expiration"]),
+            bid=pos_data.get("bid"),
+            ask=pos_data.get("ask"),
+        )
+        position = OptionPosition(contract=contract, quantity=pos_data["quantity"])
+        option_positions.append(position)
+
+    # Create Strategy object
+    return Strategy(
+        stock=stock,
+        stock_quantity=0,  # Not currently supporting stock positions
+        option_positions=option_positions,
+    )
+
+
+@router.post("/analyze", response_model=StrategyAnalysisResponse)
+async def analyze_strategy(
+    session: Annotated[SessionState, Depends(get_current_session)],
+    ibkr: Annotated[IBKRClient, Depends(get_ibkr_client)],
+) -> StrategyAnalysisResponse:
+    """
+    Analyze strategy using Monte Carlo simulation.
+
+    Performs risk analysis on the current strategy using historical price data
+    and Monte Carlo simulation to generate a probability distribution of outcomes.
+
+    Args:
+        session: Current session with strategy data
+        ibkr: IBKR client dependency
+
+    Returns:
+        Analysis results with price distribution and risk metrics
+
+    Raises:
+        401: No valid session
+        400: No strategy initialized, mixed expirations, or missing price data
+        502: IBKR API error
+
+    Example:
+        POST /api/strategy/analyze
+        Response: {
+            "price_distribution": [
+                {"lower": 145.0, "upper": 150.0, "count": 127, "midpoint": 147.5},
+                ...
+            ],
+            "expected_value": 250.50,
+            "probability_of_profit": 0.68,
+            "max_gain": 1000.0,
+            "max_loss": -500.0
+        }
+    """
+    # Reconstruct Strategy object from session
+    strategy = _reconstruct_strategy_from_session(session)
+
+    # Validate strategy is ready for analysis
+    strategy.validate_for_analysis()
+
+    # Get target expiration from session
+    strategy_data = session.data.get("strategy", {})
+    target_date_str = strategy_data.get("target_date")
+    if not target_date_str:
+        raise ValidationError("No target date found in strategy")
+
+    # Get earliest expiration date from option positions
+    target_expiration = strategy.get_earliest_expiration()
+    if not target_expiration:
+        raise ValidationError(
+            "Strategy has no option positions. Add at least one position before analyzing."
+        )
+
+    # Fetch historical data from IBKR
+    historical_data = await ibkr.get_historical_data(
+        conid=strategy.stock.conid,
+        years=5,  # Use 5 years of historical data
+    )
+
+    # Extract closing prices and calculate geometric returns
+    closes = historical_data["closes"]
+    returns = geometric_returns(closes)
+
+    # Generate price distribution using Monte Carlo
+    price_distribution = get_price_distribution(
+        current_price=strategy.stock.current_price,
+        returns=returns,
+        target_date=target_expiration,
+        bootstrap_samples=10000,  # 10k Monte Carlo simulations
+    )
+
+    # Create histogram bins
+    bins = create_histogram(price_distribution, n_bins=50)
+
+    # Calculate risk metrics
+    risk_metrics = calculate_risk_metrics(bins, strategy)
+
+    # Convert bins to response format
+    bin_responses = [
+        PriceBinResponse(
+            lower=bin.lower,
+            upper=bin.upper,
+            count=bin.count,
+            midpoint=bin.midpoint,
+        )
+        for bin in bins
+    ]
+
+    return StrategyAnalysisResponse(
+        price_distribution=bin_responses,
+        expected_value=risk_metrics.expected_value,
+        probability_of_profit=risk_metrics.probability_of_profit,
+        max_gain=risk_metrics.max_gain,
+        max_loss=risk_metrics.max_loss,
     )

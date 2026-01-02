@@ -11,6 +11,7 @@ import time
 from datetime import date
 from unittest.mock import AsyncMock, Mock
 
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
@@ -155,6 +156,61 @@ class TestFullStrategyWorkflow:
         final_data = delete_response.json()
         assert len(final_data["positions"]) == 1
         assert final_data["positions"][0]["conid"] == call_conid
+
+    def test_full_workflow_with_analysis(self, test_client, mock_ibkr_client):
+        """Test complete workflow from init to analysis."""
+        # Step 1: Initialize strategy
+        init_response = test_client.post("/api/strategy/init", json={"symbol": "AAPL"})
+        assert init_response.status_code == 200
+        session_id = init_response.json()["session_id"]
+        cookies = {"session_id": session_id}
+
+        # Step 2: Add a position
+        add_response = test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123456, "quantity": 2},
+            cookies=cookies,
+        )
+        assert add_response.status_code == 200
+
+        # Step 3: Mock historical data for analysis
+        closes = np.array([100.0 + i * 0.5 for i in range(260)])  # 1 year of data
+        mock_ibkr_client.get_historical_data = AsyncMock(
+            return_value={"closes": closes}
+        )
+
+        # Step 4: Analyze the strategy
+        analyze_response = test_client.post(
+            "/api/strategy/analyze",
+            cookies=cookies,
+        )
+        assert analyze_response.status_code == 200
+        analysis = analyze_response.json()
+
+        # Verify analysis results
+        assert "price_distribution" in analysis
+        assert "expected_value" in analysis
+        assert "probability_of_profit" in analysis
+        assert "max_gain" in analysis
+        assert "max_loss" in analysis
+
+        # Verify price distribution bins
+        bins = analysis["price_distribution"]
+        assert len(bins) > 0
+        total_count = sum(b["count"] for b in bins)
+        assert total_count == 10000  # 10k Monte Carlo simulations
+
+        # Verify metrics are valid
+        assert 0.0 <= analysis["probability_of_profit"] <= 1.0
+        assert isinstance(analysis["expected_value"], (int, float))
+
+        # Step 5: Verify session is still valid after analysis
+        add_response2 = test_client.post(
+            "/api/strategy/positions",
+            json={"conid": 123457, "quantity": -1},
+            cookies=cookies,
+        )
+        assert add_response2.status_code == 200
 
 
 class TestSessionPersistence:
