@@ -5,7 +5,9 @@ Creates and configures the FastAPI application with middleware and routes.
 """
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +21,22 @@ from .routes import health, stocks, strategy
 # Background task control
 _cleanup_task: asyncio.Task | None = None
 _shutdown_event: asyncio.Event | None = None
+_plot_executor: ThreadPoolExecutor | None = None
+
+
+def get_plot_executor() -> ThreadPoolExecutor:
+    """
+    Get the global thread pool executor for matplotlib operations.
+
+    Returns:
+        ThreadPoolExecutor for running matplotlib operations
+
+    Raises:
+        RuntimeError: If called before application startup
+    """
+    if _plot_executor is None:
+        raise RuntimeError("Plot executor not initialized. Application not started?")
+    return _plot_executor
 
 
 async def session_cleanup_task() -> None:
@@ -55,11 +73,20 @@ async def lifespan(app: FastAPI):
     Starts background session cleanup task on startup,
     stops it on shutdown.
     """
-    global _cleanup_task, _shutdown_event
+    global _cleanup_task, _shutdown_event, _plot_executor
 
     # Startup
     _shutdown_event = asyncio.Event()
     _cleanup_task = asyncio.create_task(session_cleanup_task())
+
+    # Initialize plot executor for matplotlib operations
+    # Use 2 worker threads to allow concurrent plot generation without blocking
+    _plot_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="plot")
+
+    # Ensure plots directory exists
+    plots_dir = Path("static/plots")
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Plot directory initialized: {plots_dir.absolute()}")
 
     yield
 
@@ -68,6 +95,8 @@ async def lifespan(app: FastAPI):
         _shutdown_event.set()
     if _cleanup_task:
         await _cleanup_task
+    if _plot_executor:
+        _plot_executor.shutdown(wait=True)
 
 
 def create_app() -> FastAPI:
