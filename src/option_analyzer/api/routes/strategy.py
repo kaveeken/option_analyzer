@@ -644,12 +644,13 @@ async def analyze_strategy(
     if not target_date_str:
         raise ValidationError("No target date found in strategy")
 
-    # Get earliest expiration date from option positions
+    # Get earliest expiration date from option positions, or fetch from option chain
     target_expiration = strategy.get_earliest_expiration()
     if not target_expiration:
-        raise ValidationError(
-            "Strategy has no option positions. Add at least one position before analyzing."
-        )
+        # For stock-only strategies, fetch option chain to get expiration date
+        stock_conid = strategy.stock.conid
+        chain = await ibkr.get_option_chain(stock_conid, target_date_str)
+        target_expiration = chain.expiration
 
     # Fetch historical data from IBKR
     historical_data = await ibkr.get_historical_data(
