@@ -1,0 +1,220 @@
+/**
+ * Layout Styles
+ * Grid system, containers, and scrollable areas
+ */
+
+/* Main Container - Two Column Grid */
+.container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-xl);
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: var(--space-xl);
+    min-height: 100vh;
+}
+
+/* Columns */
+.left-column,
+.right-column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+/* Section Container */
+.section {
+    background-color: var(--color-bg);
+    border: var(--border-width) solid var(--color-border);
+    border-radius: var(--border-radius-lg);
+    padding: var(--space-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.section h2 {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text);
+    margin-bottom: var(--space-md);
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-md);
+}
+
+.section-header h2 {
+    margin-bottom: 0;
+}
+
+/* Scrollable Containers */
+.option-chain-container {
+    max-height: 600px;
+    overflow-y: auto;
+    overflow-x: auto;
+    border: var(--border-width) solid var(--color-border);
+    border-radius: var(--border-radius-md);
+    margin-top: var(--space-md);
+}
+
+/* Custom Scrollbar Styling */
+.option-chain-container::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.option-chain-container::-webkit-scrollbar-track {
+    background: var(--color-bg-tertiary);
+    border-radius: var(--border-radius-sm);
+}
+
+.option-chain-container::-webkit-scrollbar-thumb {
+    background: var(--color-border-hover);
+    border-radius: var(--border-radius-sm);
+}
+
+.option-chain-container::-webkit-scrollbar-thumb:hover {
+    background: var(--color-secondary);
+}
+
+/* Positions List */
+.positions-list {
+    margin-top: var(--space-md);
+}
+
+/* Chart Container */
+.chart-container {
+    margin-top: var(--space-lg);
+    text-align: center;
+}
+
+.strategy-chart {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-md);
+}
+
+/* Metrics Display */
+.metrics-display {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-md);
+    margin-top: var(--space-md);
+    padding: var(--space-md);
+    background-color: var(--color-bg-tertiary);
+    border-radius: var(--border-radius-md);
+}
+
+.metric-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.metric-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    font-weight: var(--font-weight-medium);
+}
+
+.metric-value {
+    font-size: var(--font-size-lg);
+    color: var(--color-text);
+    font-weight: var(--font-weight-semibold);
+    font-family: var(--font-family-mono);
+}
+
+/* Stock Info Display */
+.stock-info {
+    display: flex;
+    gap: var(--space-lg);
+    margin-top: var(--space-md);
+    padding: var(--space-md);
+    background-color: var(--color-bg-tertiary);
+    border-radius: var(--border-radius-md);
+}
+
+.stock-info-item {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.stock-info-item .label {
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+}
+
+.stock-info-item .value {
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text);
+}
+
+/* Stock Quantity Container */
+.stock-quantity {
+    margin-bottom: var(--space-md);
+    padding-bottom: var(--space-md);
+    border-bottom: var(--border-width) solid var(--color-border);
+}
+
+.stock-quantity label {
+    display: block;
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-sm);
+}
+
+.stock-quantity-display {
+    margin-top: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background-color: var(--color-bg-tertiary);
+    border-radius: var(--border-radius-md);
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.stock-quantity-display .label {
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+}
+
+.stock-quantity-display .value {
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text);
+}
+
+/* Analysis Controls */
+.analysis-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background-color: var(--color-bg-tertiary);
+    border-radius: var(--border-radius-md);
+}
+
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.control-group label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+/* Empty State */
+.empty-state {
+    padding: var(--space-xl);
+    text-align: center;
+    color: var(--color-text-muted);
+    font-style: italic;
+}

@@ -1,0 +1,305 @@
+/**
+ * Component Styles
+ * Buttons, forms, tables, error banners, spinners
+ */
+
+/* Buttons */
+.btn-primary,
+.btn-secondary {
+    padding: var(--space-sm) var(--space-lg);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-medium);
+    border: none;
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+}
+
+.btn-primary {
+    background-color: var(--color-primary);
+    color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background-color: var(--color-primary-hover);
+    box-shadow: var(--shadow-md);
+}
+
+.btn-secondary {
+    background-color: var(--color-secondary);
+    color: white;
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background-color: var(--color-secondary-hover);
+    box-shadow: var(--shadow-md);
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+button:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* Form Elements */
+.input-group {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+input[type="text"],
+input[type="number"],
+.select-input {
+    flex: 1;
+    padding: var(--space-sm) var(--space-md);
+    font-size: var(--font-size-base);
+    border: var(--border-width) solid var(--color-border);
+    border-radius: var(--border-radius-md);
+    transition: border-color var(--transition-fast);
+    background-color: var(--color-bg);
+    color: var(--color-text);
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+.select-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+input[type="text"]::placeholder,
+input[type="number"]::placeholder {
+    color: var(--color-text-muted);
+}
+
+input[type="checkbox"] {
+    width: 1.125rem;
+    height: 1.125rem;
+    cursor: pointer;
+}
+
+/* Tables */
+.option-chain-table,
+.positions-table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: var(--color-bg);
+}
+
+.option-chain-table thead,
+.positions-table thead {
+    position: sticky;
+    top: 0;
+    background-color: var(--color-bg-tertiary);
+    z-index: var(--z-base);
+}
+
+.option-chain-table th,
+.positions-table th {
+    padding: var(--space-sm) var(--space-md);
+    text-align: center;
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    border-bottom: var(--border-width-thick) solid var(--color-border);
+    white-space: nowrap;
+}
+
+.option-chain-table td,
+.positions-table td {
+    padding: var(--space-sm) var(--space-md);
+    text-align: center;
+    border-bottom: var(--border-width) solid var(--color-border);
+    font-size: var(--font-size-sm);
+}
+
+.option-chain-table tbody tr:hover,
+.positions-table tbody tr:hover {
+    background-color: var(--color-bg-secondary);
+}
+
+/* Option Chain Table Headers */
+.calls-header {
+    background-color: rgba(22, 163, 74, 0.1);
+    color: var(--color-success);
+}
+
+.puts-header {
+    background-color: rgba(220, 38, 38, 0.1);
+    color: var(--color-error);
+}
+
+.strike-header {
+    background-color: var(--color-bg-tertiary);
+    font-weight: var(--font-weight-bold);
+}
+
+/* Strike Column */
+.option-chain-table .strike-price {
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text);
+    background-color: var(--color-bg-tertiary);
+}
+
+/* Add Position Buttons in Table */
+.option-chain-table button {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: var(--font-size-xs);
+    border: var(--border-width) solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background-color: var(--color-bg);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.option-chain-table button:hover {
+    background-color: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+}
+
+/* Position Type Badges */
+.position-type {
+    display: inline-block;
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+}
+
+.position-type.call {
+    background-color: rgba(22, 163, 74, 0.1);
+    color: var(--color-success);
+}
+
+.position-type.put {
+    background-color: rgba(220, 38, 38, 0.1);
+    color: var(--color-error);
+}
+
+/* Action Buttons in Positions Table */
+.action-buttons {
+    display: flex;
+    gap: var(--space-xs);
+    justify-content: center;
+}
+
+.action-buttons button {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: var(--font-size-xs);
+    border: none;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.action-buttons .btn-modify {
+    background-color: var(--color-secondary);
+    color: white;
+}
+
+.action-buttons .btn-modify:hover {
+    background-color: var(--color-secondary-hover);
+}
+
+.action-buttons .btn-delete {
+    background-color: var(--color-error);
+    color: white;
+}
+
+.action-buttons .btn-delete:hover {
+    background-color: #b91c1c;
+}
+
+/* Error Banner */
+.error-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background-color: var(--color-error);
+    color: white;
+    padding: var(--space-md) var(--space-lg);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: var(--shadow-lg);
+    z-index: var(--z-modal);
+    animation: slideDown var(--transition-base);
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-100%);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+
+.error-banner #error-message {
+    flex: 1;
+    font-weight: var(--font-weight-medium);
+}
+
+.error-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: var(--font-size-2xl);
+    cursor: pointer;
+    padding: 0;
+    margin-left: var(--space-lg);
+    line-height: 1;
+    opacity: 0.8;
+    transition: opacity var(--transition-fast);
+}
+
+.error-close:hover {
+    opacity: 1;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: var(--space-lg);
+    z-index: var(--z-overlay);
+}
+
+.loading-overlay #loading-message {
+    color: white;
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-medium);
+}
+
+/* Spinner */
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
