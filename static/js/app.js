@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initSymbolInput();
     initOptionChain();
     initPositionManager();
+    initAnalysis();
 
     console.log('Option Returns Analyzer - Ready');
 });
