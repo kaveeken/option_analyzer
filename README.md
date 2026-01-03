@@ -25,7 +25,7 @@ FastAPI-based web application for analyzing option strategies using Monte Carlo 
 ## Installation
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/kaveeken/option_analyzer
 cd option_returns
 
 # Using pip
