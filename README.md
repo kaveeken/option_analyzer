@@ -97,6 +97,7 @@ Implementation uses NumPy vectorization with memory or Redis caching for efficie
 ## Acknowledgments
 
 Built with:
+- [Claude Code](https://claude.com/claude-code) - AI-powered development assistant
 - [FastAPI](https://fastapi.tiangolo.com/) - Modern web framework
 - [NumPy](https://numpy.org/) - Numerical computing
 - [Matplotlib](https://matplotlib.org/) - Visualization
