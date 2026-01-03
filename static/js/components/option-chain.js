@@ -26,6 +26,7 @@ function initOptionChain() {
     on(monthLoad, 'click', async () => {
         const symbol = state.get('symbol');
         const month = monthSelector.value;
+        const currentTargetDate = state.get('targetDate');
 
         if (!symbol || !month) {
             showError('Please select an expiration month');
@@ -33,6 +34,11 @@ function initOptionChain() {
         }
 
         try {
+            // Update target date if it's different from current
+            if (month !== currentTargetDate) {
+                await updateTargetDate(month);
+            }
+
             // Load option chain from API
             await getOptionChain(symbol, month);
 
