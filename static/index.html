@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Option Returns Analyzer</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+    <!-- Error Banner -->
+    <div id="error-banner" class="error-banner hidden">
+        <span id="error-message"></span>
+        <button id="error-close" class="error-close">&times;</button>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <span id="loading-message">Loading...</span>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Left Column: Inputs and Option Chain -->
+        <div class="left-column">
+            <!-- Symbol Input Section -->
+            <section id="symbol-section" class="section">
+                <h2>Stock Symbol</h2>
+                <div class="input-group">
+                    <input
+                        type="text"
+                        id="symbol-input"
+                        placeholder="Enter symbol (e.g., AAPL)"
+                        maxlength="10"
+                        autocomplete="off"
+                    >
+                    <button id="symbol-submit" class="btn-primary">Load</button>
+                </div>
+
+                <!-- Stock Info Display -->
+                <div id="stock-info" class="stock-info hidden">
+                    <div class="stock-info-item">
+                        <span class="label">Symbol:</span>
+                        <span id="stock-symbol" class="value"></span>
+                    </div>
+                    <div class="stock-info-item">
+                        <span class="label">Current Price:</span>
+                        <span id="stock-price" class="value"></span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Month Selector Section -->
+            <section id="month-section" class="section hidden">
+                <h2>Expiration Month</h2>
+                <div class="input-group">
+                    <select id="month-selector" class="select-input">
+                        <option value="">Select expiration month</option>
+                    </select>
+                    <button id="month-load" class="btn-primary">Load Chain</button>
+                </div>
+            </section>
+
+            <!-- Option Chain Table -->
+            <section id="option-chain-section" class="section hidden">
+                <h2>Option Chain</h2>
+                <div class="option-chain-container">
+                    <table id="option-chain-table" class="option-chain-table">
+                        <thead>
+                            <tr>
+                                <th colspan="3" class="calls-header">Calls</th>
+                                <th class="strike-header">Strike</th>
+                                <th colspan="3" class="puts-header">Puts</th>
+                            </tr>
+                            <tr>
+                                <th>Bid</th>
+                                <th>Ask</th>
+                                <th>Add</th>
+                                <th>Price</th>
+                                <th>Add</th>
+                                <th>Bid</th>
+                                <th>Ask</th>
+                            </tr>
+                        </thead>
+                        <tbody id="option-chain-body">
+                            <!-- Rows populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <!-- Right Column: Positions and Analysis -->
+        <div class="right-column">
+            <!-- Position Management Section -->
+            <section id="position-section" class="section">
+                <div class="section-header">
+                    <h2>Positions</h2>
+                    <button id="reset-strategy" class="btn-secondary hidden">Reset All</button>
+                </div>
+
+                <!-- Stock Quantity -->
+                <div id="stock-quantity-container" class="stock-quantity hidden">
+                    <label for="stock-quantity-input">Stock Quantity:</label>
+                    <div class="input-group">
+                        <input
+                            type="number"
+                            id="stock-quantity-input"
+                            placeholder="0"
+                            step="1"
+                        >
+                        <button id="stock-quantity-update" class="btn-primary">Update</button>
+                    </div>
+                    <div id="stock-quantity-display" class="stock-quantity-display hidden">
+                        <span class="label">Stock Position:</span>
+                        <span id="stock-quantity-value" class="value">0 shares</span>
+                    </div>
+                </div>
+
+                <!-- Option Positions List -->
+                <div id="positions-list" class="positions-list">
+                    <div id="empty-positions" class="empty-state">
+                        No positions added yet
+                    </div>
+                    <table id="positions-table" class="positions-table hidden">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Strike</th>
+                                <th>Qty</th>
+                                <th>Bid</th>
+                                <th>Ask</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="positions-body">
+                            <!-- Rows populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Analysis Section -->
+            <section id="analysis-section" class="section hidden">
+                <h2>Analysis</h2>
+
+                <!-- Analysis Controls -->
+                <div class="analysis-controls">
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="auto-analyze" checked>
+                            Auto-analyze on changes
+                        </label>
+                    </div>
+                    <button id="manual-analyze" class="btn-primary" disabled>
+                        Analyze Strategy
+                    </button>
+                </div>
+
+                <!-- Metrics Display -->
+                <div id="metrics-display" class="metrics-display hidden">
+                    <div class="metric-item">
+                        <span class="metric-label">Expected Value:</span>
+                        <span id="metric-ev" class="metric-value"></span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">Probability of Profit:</span>
+                        <span id="metric-pop" class="metric-value"></span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">Max Gain:</span>
+                        <span id="metric-max-gain" class="metric-value"></span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">Max Loss:</span>
+                        <span id="metric-max-loss" class="metric-value"></span>
+                    </div>
+                </div>
+
+                <!-- Chart Display -->
+                <div id="chart-container" class="chart-container hidden">
+                    <img id="strategy-chart" class="strategy-chart" alt="Strategy visualization">
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/dom.js"></script>
+    <script src="/static/js/state.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
