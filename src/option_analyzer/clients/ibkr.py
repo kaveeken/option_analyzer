@@ -147,7 +147,11 @@ class IBKRClient:
         """
         endpoint = f"iserver/marketdata/snapshot?conids={conid}&fields=31,84,86"
         response = self._cache.get(endpoint) # duplicate code
-        if response is None:
+        def _response_has_all_prices(response: list[dict[str,float]]) -> bool:
+            return response[0].get("31", None) is not None \
+                and response[0].get("84", None) is not None \
+                and response[0].get("86", None) is not None
+        if response is None or not _response_has_all_prices(response):
             response = await self.get_request(endpoint)
             if not isinstance(response, list) or len(response) == 0:
                 raise IBKRAPIError("Invalid marked data snapshot")
