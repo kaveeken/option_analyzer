@@ -50,9 +50,10 @@ function initAnalysis() {
             show(analysisSection);
         }
 
-        // Auto-analyze when positions change (if enabled)
-        if (changedKeys.includes('positions')) {
-            if (newState.autoAnalyze && newState.positions.length > 0) {
+        // Auto-analyze when positions or stock quantity change (if enabled)
+        if (changedKeys.includes('positions') || changedKeys.includes('stockQuantity')) {
+            const hasContent = newState.positions.length > 0 || (newState.stockQuantity !== 0);
+            if (newState.autoAnalyze && hasContent) {
                 // Use setTimeout to avoid triggering during initial load
                 setTimeout(() => triggerAnalysis(), 100);
             }
@@ -75,9 +76,12 @@ function initAnalysis() {
  * Trigger strategy analysis
  */
 async function triggerAnalysis() {
-    // Check if we have positions
-    if (!state.hasPositions()) {
-        showError('Add at least one position to analyze the strategy');
+    // Check if we have positions or stock quantity
+    const hasPositions = state.hasPositions();
+    const stockQuantity = state.get('stockQuantity') || 0;
+
+    if (!hasPositions && stockQuantity === 0) {
+        showError('Add positions or stock quantity to analyze the strategy');
         return;
     }
 
