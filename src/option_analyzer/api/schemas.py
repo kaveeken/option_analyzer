@@ -260,6 +260,7 @@ class StrategySummaryResponse(BaseModel):
         current_price: Current stock price
         target_date: Target expiration date
         available_expirations: Available option expiration months
+        stock_quantity: Number of shares in strategy
         positions: List of option positions
     """
 
@@ -270,6 +271,11 @@ class StrategySummaryResponse(BaseModel):
     )
     available_expirations: list[str] = Field(
         description="Available option expiration months", examples=[["JAN26", "FEB26"]]
+    )
+    stock_quantity: int = Field(
+        description="Number of shares (positive=long, negative=short, 0=no position)",
+        default=0,
+        examples=[100, -50, 0],
     )
     positions: list[PositionResponse] = Field(
         description="List of option positions", default_factory=list
@@ -288,4 +294,18 @@ class UpdateTargetDateRequest(BaseModel):
         description="New target expiration date",
         examples=["FEB26"],
         min_length=1,
+    )
+
+
+class UpdateStockQuantityRequest(BaseModel):
+    """
+    Request to update the stock quantity in the strategy.
+
+    Attributes:
+        stock_quantity: Number of shares (positive=long, negative=short, 0=no position)
+    """
+
+    stock_quantity: int = Field(
+        description="Number of shares (positive=long, negative=short, 0=no position)",
+        examples=[100, -50, 0],
     )

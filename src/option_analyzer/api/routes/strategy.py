@@ -35,6 +35,7 @@ from ..schemas import (
     StrategyInitRequest,
     StrategyInitResponse,
     StrategySummaryResponse,
+    UpdateStockQuantityRequest,
     UpdateTargetDateRequest,
 )
 
@@ -102,6 +103,7 @@ async def initialize_strategy(
         "current_price": stock.current_price,
         "target_date": target_date,
         "available_expirations": stock.available_expirations,
+        "stock_quantity": 0,  # Initialize stock quantity
         "positions": [],  # Will be populated by position endpoints
     }
 
@@ -163,6 +165,7 @@ async def get_strategy_summary(
         current_price=strategy_data["current_price"],
         target_date=strategy_data["target_date"],
         available_expirations=strategy_data.get("available_expirations", []),
+        stock_quantity=strategy_data.get("stock_quantity", 0),
         positions=positions,
     )
 
@@ -471,6 +474,9 @@ async def reset_strategy(
     # Clear all positions
     strategy_data["positions"] = []
 
+    # Clear stock quantity
+    strategy_data["stock_quantity"] = 0
+
     # Reset target_date to earliest expiration
     available_expirations = strategy_data.get("available_expirations", [])
     if available_expirations:
@@ -481,7 +487,64 @@ async def reset_strategy(
         current_price=strategy_data["current_price"],
         target_date=strategy_data["target_date"],
         available_expirations=available_expirations,
+        stock_quantity=0,
         positions=[],
+    )
+
+
+@router.patch("/stock-quantity", response_model=StrategySummaryResponse)
+async def update_stock_quantity(
+    request: UpdateStockQuantityRequest,
+    session: Annotated[SessionState, Depends(get_current_session)],
+) -> StrategySummaryResponse:
+    """
+    Update the number of shares (stock quantity) in the strategy.
+
+    Sets the stock position to the specified quantity. Positive values
+    represent long positions, negative values represent short positions,
+    and zero clears the stock position.
+
+    Args:
+        request: New stock quantity (positive=long, negative=short, 0=none)
+        session: Current session with strategy data
+
+    Returns:
+        Updated strategy summary with new stock quantity
+
+    Raises:
+        401: No valid session
+        400: No strategy initialized
+
+    Example:
+        PATCH /api/strategy/stock-quantity
+        Body: {"stock_quantity": 100}
+        Response: {
+            "symbol": "AAPL",
+            "current_price": 150.25,
+            "target_date": "JAN26",
+            "available_expirations": ["JAN26", "FEB26", "MAR26"],
+            "stock_quantity": 100,
+            "positions": [...]
+        }
+    """
+    # Get strategy from session
+    strategy_data = session.data.get("strategy")
+    if not strategy_data:
+        raise ValidationError("No strategy initialized. Call /api/strategy/init first.")
+
+    # Update stock_quantity in session
+    strategy_data["stock_quantity"] = request.stock_quantity
+
+    # Convert positions to PositionResponse format
+    positions = [PositionResponse(**pos) for pos in strategy_data.get("positions", [])]
+
+    return StrategySummaryResponse(
+        symbol=strategy_data["symbol"],
+        current_price=strategy_data["current_price"],
+        target_date=strategy_data["target_date"],
+        available_expirations=strategy_data.get("available_expirations", []),
+        stock_quantity=request.stock_quantity,
+        positions=positions,
     )
 
 
@@ -527,7 +590,7 @@ def _reconstruct_strategy_from_session(session: SessionState) -> Strategy:
     # Create Strategy object
     return Strategy(
         stock=stock,
-        stock_quantity=0,  # Not currently supporting stock positions
+        stock_quantity=strategy_data.get("stock_quantity", 0),
         option_positions=option_positions,
     )
 
