@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from typing import Annotated
 
+import numpy as np
 from fastapi import APIRouter, Depends, Response
 
 from ...clients.ibkr import IBKRClient
@@ -594,7 +595,7 @@ async def analyze_strategy(
     )
 
     # Extract closing prices and calculate geometric returns
-    closes = historical_data["closes"]
+    closes = np.array([entry["close"] for entry in historical_data["closes"]])
     returns = geometric_returns(closes)
 
     # Generate price distribution using Monte Carlo

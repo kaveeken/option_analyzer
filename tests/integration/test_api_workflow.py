@@ -8,6 +8,7 @@ Tests cover:
 """
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from unittest.mock import AsyncMock, Mock
 
@@ -16,7 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from option_analyzer.api.app import create_app
-from option_analyzer.api.dependencies import get_ibkr_client, get_session_service_dep
+from option_analyzer.api.dependencies import get_ibkr_client, get_plot_executor_dep, get_session_service_dep
 from option_analyzer.clients.ibkr import IBKRClient
 from option_analyzer.models.domain import OptionChain, OptionContract, Stock
 from option_analyzer.services.session import SessionService
@@ -76,11 +77,18 @@ def test_client(mock_ibkr_client, session_service):
     """Create a test client with mocked dependencies."""
     app = create_app()
 
+    # Create a real thread pool executor for plot operations
+    plot_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="test-plot")
+
     # Override dependencies
     app.dependency_overrides[get_ibkr_client] = lambda: mock_ibkr_client
     app.dependency_overrides[get_session_service_dep] = lambda: session_service
+    app.dependency_overrides[get_plot_executor_dep] = lambda: plot_executor
 
-    return TestClient(app)
+    yield TestClient(app)
+
+    # Cleanup
+    plot_executor.shutdown(wait=True)
 
 
 class TestFullStrategyWorkflow:
@@ -174,9 +182,10 @@ class TestFullStrategyWorkflow:
         assert add_response.status_code == 200
 
         # Step 3: Mock historical data for analysis
-        closes = np.array([100.0 + i * 0.5 for i in range(260)])  # 1 year of data
+        closes = [{"date": f"2023-{i//30+1:02d}-{i%30+1:02d}", "close": 100.0 + i * 0.5}
+                  for i in range(260)]  # 1 year of data
         mock_ibkr_client.get_historical_data = AsyncMock(
-            return_value={"closes": closes}
+            return_value={"symbol": "AAPL", "closes": closes}
         )
 
         # Step 4: Analyze the strategy

@@ -1361,9 +1361,10 @@ class TestAnalyzeStrategyEndpoint:
 
         # Mock historical data response
         # Create synthetic price data that trends upward
-        closes = np.array([100.0 + i * 0.5 for i in range(260)])  # ~1 year of daily data
+        closes = [{"date": f"2023-{i//30+1:02d}-{i%30+1:02d}", "close": 100.0 + i * 0.5}
+                  for i in range(260)]  # ~1 year of daily data
         mock_ibkr_client.get_historical_data = AsyncMock(
-            return_value={"closes": closes}
+            return_value={"symbol": "AAPL", "closes": closes}
         )
 
         # Make analysis request
@@ -1545,9 +1546,10 @@ class TestAnalyzeStrategyEndpoint:
         )
 
         # Mock historical data
-        closes = np.array([100.0 + i * 0.5 for i in range(260)])
+        closes = [{"date": f"2023-{i//30+1:02d}-{i%30+1:02d}", "close": 100.0 + i * 0.5}
+                  for i in range(260)]
         mock_ibkr_client.get_historical_data = AsyncMock(
-            return_value={"closes": closes}
+            return_value={"symbol": "AAPL", "closes": closes}
         )
 
         # Analyze the spread

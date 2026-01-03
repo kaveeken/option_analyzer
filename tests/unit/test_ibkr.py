@@ -1081,16 +1081,16 @@ class TestGetHistoricalData:
 
         # Verify return format
         assert result["symbol"] == "AAPL"
-        assert "prices" in result
-        assert len(result["prices"]) == 3
+        assert "closes" in result
+        assert len(result["closes"]) == 3
 
         # Verify price entries format
-        assert result["prices"][0]["date"] == "2023-01-01"
-        assert result["prices"][0]["close"] == 130.5
-        assert result["prices"][1]["date"] == "2023-01-02"
-        assert result["prices"][1]["close"] == 131.5
-        assert result["prices"][2]["date"] == "2023-01-03"
-        assert result["prices"][2]["close"] == 132.0
+        assert result["closes"][0]["date"] == "2023-01-01"
+        assert result["closes"][0]["close"] == 130.5
+        assert result["closes"][1]["date"] == "2023-01-02"
+        assert result["closes"][1]["close"] == 131.5
+        assert result["closes"][2]["date"] == "2023-01-03"
+        assert result["closes"][2]["close"] == 132.0
 
     @pytest.mark.asyncio
     async def test_get_historical_data_success_3_years(self, client: IBKRClient) -> None:
@@ -1107,7 +1107,7 @@ class TestGetHistoricalData:
         result = await client.get_historical_data(265598, years=3)
 
         assert result["symbol"] == "MSFT"
-        assert len(result["prices"]) == 2
+        assert len(result["closes"]) == 2
         # Verify endpoint was called with correct period
         client.get_request.assert_called_once()
         call_args = client.get_request.call_args[0][0]
@@ -1287,9 +1287,9 @@ class TestGetHistoricalData:
         result = await client.get_historical_data(265598, years=1)
 
         # Verify ISO 8601 date format (YYYY-MM-DD)
-        assert result["prices"][0]["date"] == "2024-01-01"
+        assert result["closes"][0]["date"] == "2024-01-01"
         # Verify it's a string, not a date object
-        assert isinstance(result["prices"][0]["date"], str)
+        assert isinstance(result["closes"][0]["date"], str)
 
     @pytest.mark.asyncio
     async def test_get_historical_data_empty_data_list(
@@ -1302,7 +1302,7 @@ class TestGetHistoricalData:
         result = await client.get_historical_data(265598, years=1)
 
         assert result["symbol"] == "AAPL"
-        assert result["prices"] == []
+        assert result["closes"] == []
 
     @pytest.mark.asyncio
     async def test_get_historical_data_different_conids_different_cache(
@@ -1350,8 +1350,8 @@ class TestGetHistoricalData:
 
         # Should call API twice (different years)
         assert client.get_request.call_count == 2
-        assert len(result1["prices"]) == 1
-        assert len(result2["prices"]) == 2
+        assert len(result1["closes"]) == 1
+        assert len(result2["closes"]) == 2
 
     @pytest.mark.asyncio
     async def test_get_historical_data_close_price_extraction(
@@ -1369,12 +1369,12 @@ class TestGetHistoricalData:
         result = await client.get_historical_data(265598, years=1)
 
         # Verify only close price is in result
-        assert result["prices"][0]["close"] == 132.5
+        assert result["closes"][0]["close"] == 132.5
         # Verify no other OHLCV fields
-        assert "open" not in result["prices"][0]
-        assert "high" not in result["prices"][0]
-        assert "low" not in result["prices"][0]
-        assert "volume" not in result["prices"][0]
+        assert "open" not in result["closes"][0]
+        assert "high" not in result["closes"][0]
+        assert "low" not in result["closes"][0]
+        assert "volume" not in result["closes"][0]
 
     @pytest.mark.asyncio
     async def test_get_historical_data_endpoint_format(self, client: IBKRClient) -> None:

@@ -307,7 +307,7 @@ class IBKRClient:
                    "close": ohlct["c"]}
                   for ohlct in ohlct_list]
         return {"symbol": response["symbol"],
-                "prices": closes}
+                "closes": closes}
 
     async def aclose(self) -> None:
         await self.client.aclose()

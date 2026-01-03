@@ -832,7 +832,7 @@ class TestHistoricalDataErrors:
         result = await client.get_historical_data(265598, years=1)
 
         assert result["symbol"] == "AAPL"
-        assert result["prices"] == []
+        assert result["closes"] == []
 
     @pytest.mark.asyncio
     async def test_years_validation_negative(self, client: IBKRClient) -> None:
