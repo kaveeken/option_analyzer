@@ -13,6 +13,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..config import get_settings
@@ -218,5 +219,11 @@ def create_app() -> FastAPI:
 
     # Mount static files for serving generated plots
     app.mount("/static", StaticFiles(directory="static"), name="static")
+
+    # Serve index.html at root
+    @app.get("/")
+    async def root():
+        """Serve the frontend application."""
+        return FileResponse("static/index.html")
 
     return app
