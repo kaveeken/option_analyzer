@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize components
     initSymbolInput();
+    initOptionChain();
 
     console.log('Option Returns Analyzer - Ready');
 });

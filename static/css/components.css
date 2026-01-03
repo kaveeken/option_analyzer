@@ -303,3 +303,31 @@ input[type="checkbox"] {
         transform: rotate(360deg);
     }
 }
+
+/* Position Indicator (shown when option is already in strategy) */
+.position-indicator {
+    display: inline-block;
+    padding: var(--space-xs) var(--space-sm);
+    background-color: var(--color-primary);
+    color: white;
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+}
+
+/* Add Position Button */
+.btn-add-position {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: var(--font-size-xs);
+    border: var(--border-width) solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background-color: var(--color-bg);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-add-position:hover {
+    background-color: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+}
