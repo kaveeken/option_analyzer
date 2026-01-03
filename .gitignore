@@ -69,3 +69,10 @@ AGENTS.md
 
 # Beads issue tracker (optional - remove this if you want to track beads in git)
 .beads/last-touched
+
+# Generated plot files (created by analysis)
+static/plots/*.png
+
+# Example/test files
+example_*.png
+generate_example_*.py

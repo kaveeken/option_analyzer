@@ -13,8 +13,6 @@ import time
 from datetime import timedelta
 from threading import Thread
 
-import pytest
-
 from option_analyzer.clients.cache import CacheInterface, InMemoryCache
 
 

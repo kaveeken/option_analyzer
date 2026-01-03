@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import types
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any, Literal
 
 import httpx
@@ -136,7 +136,7 @@ class IBKRClient:
             "last": snapshot_entry.get("31", None),
             "bid": snapshot_entry.get("84", None),
             "ask": snapshot_entry.get("86", None)}
-        
+
     async def get_market_snapshot(self, conid: int|str, ttl: timedelta | None) -> list[dict[str, float|int|None]]:
         """
         Get current market data for given contract id.
@@ -225,7 +225,7 @@ class IBKRClient:
             right=right,
             expiration = datetime.strptime(response[0]["maturityDate"], "%Y%m%d").date()) # maturityDate is YYYYMMDD
         return unpriced_contract
-            
+
     async def get_unpriced_option_chain(
             self,
             conid: int,

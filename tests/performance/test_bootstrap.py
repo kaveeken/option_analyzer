@@ -15,7 +15,6 @@ import pytest
 from option_analyzer.services.statistics import (
     bootstrap_walk,
     create_histogram,
-    geometric_returns,
     monte_carlo_simulation,
 )
 

@@ -15,7 +15,7 @@ Tests cover:
 import asyncio
 import time
 from datetime import timedelta
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest

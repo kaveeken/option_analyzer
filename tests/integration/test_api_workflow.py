@@ -12,12 +12,15 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from unittest.mock import AsyncMock, Mock
 
-import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
 from option_analyzer.api.app import create_app
-from option_analyzer.api.dependencies import get_ibkr_client, get_plot_executor_dep, get_session_service_dep
+from option_analyzer.api.dependencies import (
+    get_ibkr_client,
+    get_plot_executor_dep,
+    get_session_service_dep,
+)
 from option_analyzer.clients.ibkr import IBKRClient
 from option_analyzer.models.domain import OptionChain, OptionContract, Stock
 from option_analyzer.services.session import SessionService

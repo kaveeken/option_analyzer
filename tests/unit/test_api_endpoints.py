@@ -12,7 +12,6 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from unittest.mock import AsyncMock, Mock
 
-import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 

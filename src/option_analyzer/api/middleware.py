@@ -98,7 +98,7 @@ async def error_handler_middleware(request: Request, call_next):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=ErrorResponse(error=e.message, code=e.code).model_dump(),
         )
-    except Exception as e:
+    except Exception:
         # Unexpected errors - don't expose internals
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
