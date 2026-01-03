@@ -102,4 +102,4 @@ Built with:
 - [NumPy](https://numpy.org/) - Numerical computing
 - [Matplotlib](https://matplotlib.org/) - Visualization
 - [Pydantic](https://docs.pydantic.dev/) - Data validation
-- Interactive Brokers Client Portal API
+- [Interactive Brokers Web API](https://www.interactivebrokers.com/campus/ibkr-api-page/web-api/)
