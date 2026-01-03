@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     session_ttl: int = 3600  # Session timeout in seconds (1 hour)
     session_cleanup_interval: int = 300  # Cleanup every 5 minutes
 
+    # Plot File Management
+    plot_retention_seconds: int = 7200  # Keep plots for 2 hours (longer than session TTL)
+    plot_cleanup_interval: int = 600  # Cleanup orphaned plots every 10 minutes
+
     # Cache Configuration
     cache_type: Literal["memory", "redis"] = "memory"
     redis_url: str | None = None

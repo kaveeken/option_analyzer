@@ -8,17 +8,19 @@ Tests cover:
 - Expired session cleanup
 - Session not found error handling
 - Session data storage operations
+- Plot file cleanup on session deletion
 """
 
 import time
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
+from option_analyzer.config import Settings
 from option_analyzer.models.session import SessionState
 from option_analyzer.services.session import SessionService, get_session_service
 from option_analyzer.utils.exceptions import SessionExpiredError
-from option_analyzer.config import Settings
 
 
 class TestSessionService:
@@ -278,3 +280,130 @@ class TestSessionState:
         assert session.data["number"] == 42
         assert session.data["list"] == [1, 2, 3]
         assert session.data["dict"] == {"nested": "data"}
+
+    def test_session_state_add_plot_file(self) -> None:
+        """Test adding plot files to session."""
+        session = SessionState(session_id="test-123")
+
+        assert len(session.plot_files) == 0
+
+        session.add_plot_file("static/plots/test-123_20260103_120000.png")
+        assert len(session.plot_files) == 1
+        assert "static/plots/test-123_20260103_120000.png" in session.plot_files
+
+    def test_session_state_add_plot_file_no_duplicates(self) -> None:
+        """Test that adding the same plot file twice doesn't create duplicates."""
+        session = SessionState(session_id="test-123")
+
+        session.add_plot_file("static/plots/test-123_20260103_120000.png")
+        session.add_plot_file("static/plots/test-123_20260103_120000.png")
+
+        assert len(session.plot_files) == 1
+
+
+class TestSessionPlotCleanup:
+    """Test plot file cleanup functionality."""
+
+    def test_delete_plot_files_removes_files(self, tmp_path: Path) -> None:
+        """Test that _delete_plot_files removes plot files."""
+        # Create test plot files
+        plot1 = tmp_path / "test1.png"
+        plot2 = tmp_path / "test2.png"
+        plot1.write_text("fake plot 1")
+        plot2.write_text("fake plot 2")
+
+        # Create session with plot files
+        session = SessionState(session_id="test-123")
+        session.add_plot_file(str(plot1))
+        session.add_plot_file(str(plot2))
+
+        # Delete plot files
+        service = SessionService(ttl_seconds=3600)
+        deleted = service._delete_plot_files(session)
+
+        assert deleted == 2
+        assert not plot1.exists()
+        assert not plot2.exists()
+
+    def test_delete_plot_files_handles_missing_files(self, tmp_path: Path) -> None:
+        """Test that _delete_plot_files handles already-deleted files gracefully."""
+        # Create session with non-existent plot files
+        session = SessionState(session_id="test-123")
+        session.add_plot_file(str(tmp_path / "nonexistent.png"))
+
+        service = SessionService(ttl_seconds=3600)
+        deleted = service._delete_plot_files(session)
+
+        # Should not crash, returns 0 for non-existent files
+        assert deleted == 0
+
+    def test_delete_session_removes_plot_files(self, tmp_path: Path) -> None:
+        """Test that delete_session removes associated plot files."""
+        # Create test plot file
+        plot1 = tmp_path / "test1.png"
+        plot1.write_text("fake plot")
+
+        # Create session and add plot file
+        service = SessionService(ttl_seconds=3600)
+        session = service.create_session()
+        session.add_plot_file(str(plot1))
+
+        assert plot1.exists()
+
+        # Delete session
+        service.delete_session(session.session_id)
+
+        # Plot file should be deleted
+        assert not plot1.exists()
+
+    def test_cleanup_expired_sessions_removes_plot_files(self, tmp_path: Path) -> None:
+        """Test that cleanup_expired_sessions removes plot files."""
+        # Create test plot files
+        plot1 = tmp_path / "test1.png"
+        plot2 = tmp_path / "test2.png"
+        plot1.write_text("fake plot 1")
+        plot2.write_text("fake plot 2")
+
+        # Create expired sessions with plot files
+        service = SessionService(ttl_seconds=1)
+        session1 = service.create_session()
+        session2 = service.create_session()
+        session1.add_plot_file(str(plot1))
+        session2.add_plot_file(str(plot2))
+
+        assert plot1.exists()
+        assert plot2.exists()
+
+        # Wait for expiration
+        time.sleep(1.1)
+
+        # Cleanup
+        service.cleanup_expired_sessions()
+
+        # Both plot files should be deleted
+        assert not plot1.exists()
+        assert not plot2.exists()
+
+    def test_get_session_expired_removes_plot_files(self, tmp_path: Path) -> None:
+        """Test that get_session removes plot files when session is expired."""
+        # Create test plot file
+        plot1 = tmp_path / "test1.png"
+        plot1.write_text("fake plot")
+
+        # Create session with plot file
+        service = SessionService(ttl_seconds=1)
+        session = service.create_session()
+        session.add_plot_file(str(plot1))
+        session_id = session.session_id
+
+        assert plot1.exists()
+
+        # Wait for expiration
+        time.sleep(1.1)
+
+        # Try to get expired session
+        with pytest.raises(SessionExpiredError):
+            service.get_session(session_id)
+
+        # Plot file should be deleted
+        assert not plot1.exists()

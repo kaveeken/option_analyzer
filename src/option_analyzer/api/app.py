@@ -5,8 +5,10 @@ Creates and configures the FastAPI application with middleware and routes.
 """
 
 import asyncio
+import re
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -18,9 +20,9 @@ from ..services.session import get_session_service
 from .middleware import error_handler_middleware
 from .routes import health, stocks, strategy
 
-
 # Background task control
 _cleanup_task: asyncio.Task | None = None
+_plot_cleanup_task: asyncio.Task | None = None
 _shutdown_event: asyncio.Event | None = None
 _plot_executor: ThreadPoolExecutor | None = None
 
@@ -59,11 +61,81 @@ async def session_cleanup_task() -> None:
             )
             # If we get here, shutdown was signaled
             break
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Timeout means it's time to cleanup
             cleaned = session_service.cleanup_expired_sessions()
             if cleaned > 0:
                 print(f"Cleaned up {cleaned} expired sessions")
+
+
+async def plot_cleanup_task() -> None:
+    """
+    Background task to periodically clean up orphaned plot files.
+
+    Runs every plot_cleanup_interval seconds (configured in settings).
+    Deletes plot files that are:
+    - Older than plot_retention_seconds
+    - Belong to sessions that no longer exist
+    """
+    global _shutdown_event
+    settings = get_settings()
+    session_service = get_session_service(settings)
+
+    # Regex to extract session_id from filename: {session_id}_{timestamp}.png
+    filename_pattern = re.compile(r"^(.+)_\d{8}_\d{6}\.png$")
+
+    while not _shutdown_event.is_set():
+        try:
+            # Wait for cleanup interval or shutdown signal
+            await asyncio.wait_for(
+                _shutdown_event.wait(),
+                timeout=settings.plot_cleanup_interval,
+            )
+            # If we get here, shutdown was signaled
+            break
+        except TimeoutError:
+            # Timeout means it's time to cleanup orphaned plots
+            plots_dir = Path("static/plots")
+            if not plots_dir.exists():
+                continue
+
+            now = datetime.now()
+            cutoff_time = now - timedelta(seconds=settings.plot_retention_seconds)
+            deleted_count = 0
+            orphaned_count = 0
+
+            for plot_file in plots_dir.glob("*.png"):
+                try:
+                    # Check file age
+                    file_mtime = datetime.fromtimestamp(plot_file.stat().st_mtime)
+                    is_old = file_mtime < cutoff_time
+
+                    # Extract session_id from filename
+                    match = filename_pattern.match(plot_file.name)
+                    session_id = match.group(1) if match else None
+
+                    # Check if session still exists
+                    session_exists = (
+                        session_id is not None
+                        and session_id in session_service._sessions
+                    )
+
+                    # Delete if old OR orphaned (session doesn't exist)
+                    if is_old or (session_id and not session_exists):
+                        plot_file.unlink()
+                        deleted_count += 1
+                        if not session_exists:
+                            orphaned_count += 1
+
+                except Exception:
+                    # Ignore errors on individual files
+                    pass
+
+            if deleted_count > 0:
+                print(
+                    f"Cleaned up {deleted_count} plot files "
+                    f"({orphaned_count} orphaned, {deleted_count - orphaned_count} expired)"
+                )
 
 
 @asynccontextmanager
@@ -71,14 +143,15 @@ async def lifespan(app: FastAPI):
     """
     Application lifespan manager for startup/shutdown tasks.
 
-    Starts background session cleanup task on startup,
-    stops it on shutdown.
+    Starts background session and plot cleanup tasks on startup,
+    stops them on shutdown.
     """
-    global _cleanup_task, _shutdown_event, _plot_executor
+    global _cleanup_task, _plot_cleanup_task, _shutdown_event, _plot_executor
 
     # Startup
     _shutdown_event = asyncio.Event()
     _cleanup_task = asyncio.create_task(session_cleanup_task())
+    _plot_cleanup_task = asyncio.create_task(plot_cleanup_task())
 
     # Initialize plot executor for matplotlib operations
     # Use 2 worker threads to allow concurrent plot generation without blocking
@@ -96,6 +169,8 @@ async def lifespan(app: FastAPI):
         _shutdown_event.set()
     if _cleanup_task:
         await _cleanup_task
+    if _plot_cleanup_task:
+        await _plot_cleanup_task
     if _plot_executor:
         _plot_executor.shutdown(wait=True)
 

@@ -695,7 +695,7 @@ async def analyze_strategy(
 
     try:
         # Save plot to disk with session-based naming
-        plot_url = save_plot(fig, session.session_id)
+        plot_url = save_plot(fig, session.session_id, session=session)
     finally:
         # Always cleanup figure to prevent memory leaks
         cleanup_plot(fig)

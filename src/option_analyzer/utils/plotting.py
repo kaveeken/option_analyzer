@@ -211,6 +211,7 @@ def save_plot(
     fig: matplotlib.figure.Figure,
     session_id: str,
     base_path: Path = Path("static/plots"),
+    session=None,
 ) -> str:
     """
     Save a matplotlib figure to disk with session-based naming.
@@ -222,6 +223,7 @@ def save_plot(
         fig: Matplotlib figure to save
         session_id: Session identifier for filename
         base_path: Base directory for plots (default: static/plots)
+        session: Optional SessionState object for tracking plot files
 
     Returns:
         Relative path to the saved plot file (e.g., "static/plots/abc123_20260103_120530.png")
@@ -239,6 +241,7 @@ def save_plot(
         - Timestamp format: YYYYMMDD_HHMMSS
         - Directory is created if it doesn't exist
         - Thread-safe for concurrent writes (unique timestamps)
+        - If session is provided, registers file for automatic cleanup
     """
     try:
         # Ensure directory exists
@@ -253,7 +256,13 @@ def save_plot(
         fig.savefig(filepath, dpi=150, bbox_inches="tight")
 
         # Return relative path for URL construction
-        return str(Path(base_path) / filename)
+        plot_path = str(Path(base_path) / filename)
+
+        # Register file with session for cleanup
+        if session is not None:
+            session.add_plot_file(plot_path)
+
+        return plot_path
 
     except Exception as e:
         raise PlotGenerationError(f"Failed to save plot: {e}") from e
